@@ -3,6 +3,10 @@ Painel Estrategico - NL Imoveis
 Dashboard gerencial para acompanhamento de vendas, locacao e performance
 """
 import streamlit as st
+from utils.auth import (
+    usuario_logado, render_login, get_usuario_atual,
+    is_gerente, logout
+)
 
 st.set_page_config(
     page_title="NL Imoveis - Painel Estrategico",
@@ -10,6 +14,11 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# ---- Verificar autenticacao ANTES de tudo ----
+if not usuario_logado():
+    render_login()
+    st.stop()
 
 # CSS NL Imoveis - Azul/Dourado
 st.markdown("""
@@ -228,14 +237,31 @@ st.markdown("""
 
 
 def main():
+    user = get_usuario_atual()
+
     with st.sidebar:
         st.markdown("### NL IMOVEIS")
         st.markdown("*CRECI 1440 J · Natal/RN*")
         st.markdown("---")
 
+        # Info do usuario logado
+        if user:
+            perfil_label = "Gerente" if user["perfil"] == "gerente" else "Corretor"
+            st.markdown(f"**{user['nome']}**")
+            st.caption(f"{perfil_label} · {user['email']}")
+            if st.button("Sair", use_container_width=True):
+                logout()
+                st.rerun()
+            st.markdown("---")
+
+        # Menu de navegacao
+        paginas = ["Visao Geral", "Equipe Vendas", "Equipe Locacao", "Origens de Leads", "Metas & Projecoes"]
+        if is_gerente():
+            paginas.append("Gerenciar Usuarios")
+
         pagina = st.radio(
             "Navegacao",
-            ["Visao Geral", "Equipe Vendas", "Equipe Locacao", "Origens de Leads", "Metas & Projecoes"],
+            paginas,
             index=0,
             label_visibility="collapsed"
         )
@@ -259,6 +285,9 @@ def main():
     elif pagina == "Metas & Projecoes":
         from pages import metas
         metas.render()
+    elif pagina == "Gerenciar Usuarios":
+        from pages import usuarios
+        usuarios.render()
 
 
 if __name__ == "__main__":
