@@ -229,11 +229,6 @@ st.markdown("""
     footer {visibility: hidden;}
     header {visibility: hidden;}
 
-    /* Esconde o menu automatico do Streamlit (gerado da pasta pages/) */
-    [data-testid="stSidebarNav"] { display: none !important; }
-    div[data-testid="stSidebarNav"] { display: none !important; }
-    section[data-testid="stSidebar"] > div > div:first-child > div:first-child { display: none !important; }
-
     @media(max-width: 768px) {
         .kpi-grid { grid-template-columns: repeat(2, 1fr); }
         .funil-step { grid-template-columns: 90px 45px 1fr 40px; }
@@ -286,25 +281,25 @@ def main():
         st.caption("Cache: 5 min · Supabase + Jetimob")
 
     if pagina == "Visao Geral":
-        from pages import visao_geral
+        from views import visao_geral
         visao_geral.render()
     elif pagina == "Equipe Vendas":
-        from pages import equipe_vendas
+        from views import equipe_vendas
         equipe_vendas.render()
     elif pagina == "Equipe Locacao":
-        from pages import equipe_locacao
+        from views import equipe_locacao
         equipe_locacao.render()
     elif pagina == "Origens de Leads":
-        from pages import origens
+        from views import origens
         origens.render()
     elif pagina == "Metas & Projecoes":
-        from pages import metas
+        from views import metas
         metas.render()
     elif pagina == "Gerenciar Usuarios":
-        from pages import usuarios
+        from views import usuarios
         usuarios.render()
     elif pagina == "Minha Conta":
-        from pages import minha_conta
+        from views import minha_conta
         minha_conta.render()
 
 
