@@ -5,7 +5,7 @@ Dashboard gerencial para acompanhamento de vendas, locacao e performance
 import streamlit as st
 from utils.auth import (
     usuario_logado, render_login, get_usuario_atual,
-    is_gerente, logout
+    is_gerente, logout, escape
 )
 
 st.set_page_config(
@@ -247,17 +247,17 @@ def main():
         # Info do usuario logado
         if user:
             perfil_label = "Gerente" if user["perfil"] == "gerente" else "Corretor"
-            st.markdown(f"**{user['nome']}**")
-            st.caption(f"{perfil_label} · {user['email']}")
+            st.markdown(f"**{escape(user['nome'])}**")
+            st.caption(f"{perfil_label} · {escape(user['email'])}")
             if st.button("Sair", use_container_width=True):
                 logout()
                 st.rerun()
             st.markdown("---")
 
         # Menu de navegacao
-        paginas = ["Visao Geral", "Equipe Vendas", "Equipe Locacao", "Origens de Leads", "Metas & Projecoes"]
+        paginas = ["Visao Geral", "Equipe Vendas", "Equipe Locacao", "Origens de Leads", "Metas & Projecoes", "Minha Conta"]
         if is_gerente():
-            paginas.append("Gerenciar Usuarios")
+            paginas.insert(-1, "Gerenciar Usuarios")
 
         pagina = st.radio(
             "Navegacao",
@@ -288,6 +288,9 @@ def main():
     elif pagina == "Gerenciar Usuarios":
         from pages import usuarios
         usuarios.render()
+    elif pagina == "Minha Conta":
+        from pages import minha_conta
+        minha_conta.render()
 
 
 if __name__ == "__main__":

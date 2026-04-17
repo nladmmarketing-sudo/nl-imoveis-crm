@@ -1,11 +1,24 @@
 """
 Sistema de Autenticacao - NL Imoveis CRM
-Controle de acesso por email/senha com perfis (gerente, corretor)
+Login com bcrypt, rate limiting, timeout de sessao e controle de perfis.
 """
+import re
+import time
+import html
 import streamlit as st
 import bcrypt
+from datetime import datetime, timedelta, timezone
 from utils.supabase_client import get_supabase_client
 
+
+# --- Constantes de seguranca ---
+SESSAO_DURACAO_HORAS = 8
+MAX_TENTATIVAS_LOGIN = 5
+BLOQUEIO_MINUTOS = 15
+SENHA_MIN_LENGTH = 8
+
+
+# ---------- UTILS ----------
 
 def hash_senha(senha: str) -> str:
     """Gera hash bcrypt da senha"""
@@ -20,55 +33,180 @@ def verificar_senha(senha: str, senha_hash: str) -> bool:
         return False
 
 
-def autenticar_usuario(email: str, senha: str) -> dict | None:
+def validar_senha_forte(senha: str) -> tuple[bool, str]:
+    """
+    Valida politica de senha: 8+ caracteres, 1 letra e 1 numero.
+    Retorna (ok, mensagem_erro).
+    """
+    if len(senha) < SENHA_MIN_LENGTH:
+        return False, f"Senha precisa ter no minimo {SENHA_MIN_LENGTH} caracteres."
+    if not re.search(r"[A-Za-z]", senha):
+        return False, "Senha precisa ter pelo menos uma letra."
+    if not re.search(r"\d", senha):
+        return False, "Senha precisa ter pelo menos um numero."
+    return True, ""
+
+
+def escape(valor) -> str:
+    """HTML escape para prevenir XSS em markdown com unsafe_allow_html=True"""
+    return html.escape(str(valor or ""))
+
+
+# ---------- RATE LIMITING ----------
+
+def _registrar_tentativa(email: str, sucesso: bool):
+    """Registra tentativa de login na tabela de auditoria"""
+    client = get_supabase_client()
+    try:
+        client.table("login_attempts").insert({
+            "email": email.lower().strip(),
+            "sucesso": sucesso,
+        }).execute()
+    except Exception:
+        pass  # Nao falha o login se log der erro
+
+
+def _conta_tentativas_recentes(email: str) -> int:
+    """Conta tentativas falhas dos ultimos BLOQUEIO_MINUTOS"""
+    client = get_supabase_client()
+    try:
+        desde = (datetime.now(timezone.utc) - timedelta(minutes=BLOQUEIO_MINUTOS)).isoformat()
+        response = (
+            client.table("login_attempts")
+            .select("id", count="exact")
+            .eq("email", email.lower().strip())
+            .eq("sucesso", False)
+            .gte("criado_em", desde)
+            .execute()
+        )
+        return response.count or 0
+    except Exception:
+        return 0
+
+
+def _email_bloqueado(email: str) -> bool:
+    """Verifica se email excedeu limite de tentativas"""
+    return _conta_tentativas_recentes(email) >= MAX_TENTATIVAS_LOGIN
+
+
+# ---------- AUTENTICACAO ----------
+
+def autenticar_usuario(email: str, senha: str) -> tuple[dict | None, str]:
     """
     Busca usuario por email e verifica senha.
-    Retorna dict com dados do usuario ou None se falhar.
+    Retorna (dict_usuario, mensagem_erro). Usuario None se falhar.
     """
+    email = email.lower().strip()
+
+    # Rate limiting
+    if _email_bloqueado(email):
+        return None, f"Muitas tentativas erradas. Aguarde {BLOQUEIO_MINUTOS} minutos."
+
     client = get_supabase_client()
     try:
         response = (
             client.table("usuarios")
             .select("*")
-            .eq("email", email.lower().strip())
+            .eq("email", email)
             .eq("ativo", True)
             .execute()
         )
+
         if response.data and len(response.data) > 0:
             user = response.data[0]
             if verificar_senha(senha, user["senha_hash"]):
-                return user
-    except Exception as e:
-        st.error(f"Erro ao autenticar: {e}")
-    return None
+                _registrar_tentativa(email, sucesso=True)
+                return user, ""
+
+        # Mensagem generica (nao revela se email existe)
+        _registrar_tentativa(email, sucesso=False)
+        # Delay constante pra evitar timing attack
+        time.sleep(0.3)
+        return None, "Email ou senha incorretos."
+    except Exception:
+        return None, "Nao foi possivel autenticar. Tente novamente."
 
 
-def cadastrar_usuario(nome: str, email: str, senha: str, perfil: str = "corretor") -> bool:
-    """Cadastra novo usuario no sistema"""
+def cadastrar_usuario(nome: str, email: str, senha: str, perfil: str = "corretor") -> tuple[bool, str]:
+    """Cadastra novo usuario. Retorna (sucesso, mensagem)."""
+    nome = nome.strip()
+    email = email.lower().strip()
+
+    if not nome or not email or not senha:
+        return False, "Preencha todos os campos."
+
+    if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
+        return False, "Email invalido."
+
+    ok, msg = validar_senha_forte(senha)
+    if not ok:
+        return False, msg
+
+    if perfil not in ("gerente", "corretor"):
+        return False, "Perfil invalido."
+
     client = get_supabase_client()
     try:
         response = (
             client.table("usuarios")
             .insert({
-                "nome": nome.strip(),
-                "email": email.lower().strip(),
+                "nome": nome,
+                "email": email,
                 "senha_hash": hash_senha(senha),
                 "perfil": perfil,
                 "ativo": True,
             })
             .execute()
         )
-        return bool(response.data)
+        if response.data:
+            return True, "Usuario cadastrado com sucesso."
+        return False, "Nao foi possivel cadastrar."
     except Exception as e:
-        if "duplicate key" in str(e) or "unique" in str(e).lower():
-            st.error("Este email ja esta cadastrado.")
-        else:
-            st.error(f"Erro ao cadastrar: {e}")
-        return False
+        msg = str(e).lower()
+        if "duplicate" in msg or "unique" in msg:
+            return False, "Este email ja esta cadastrado."
+        return False, "Erro ao cadastrar. Tente novamente."
+
+
+def alterar_senha(user_id: int, senha_atual: str, senha_nova: str) -> tuple[bool, str]:
+    """Altera senha do proprio usuario (requer senha atual)"""
+    ok, msg = validar_senha_forte(senha_nova)
+    if not ok:
+        return False, msg
+
+    client = get_supabase_client()
+    try:
+        response = client.table("usuarios").select("*").eq("id", user_id).execute()
+        if not response.data:
+            return False, "Usuario nao encontrado."
+
+        user = response.data[0]
+        if not verificar_senha(senha_atual, user["senha_hash"]):
+            return False, "Senha atual incorreta."
+
+        novo_hash = hash_senha(senha_nova)
+        client.table("usuarios").update({"senha_hash": novo_hash}).eq("id", user_id).execute()
+        return True, "Senha alterada com sucesso."
+    except Exception:
+        return False, "Erro ao alterar senha."
+
+
+def resetar_senha_por_gerente(user_id: int, senha_nova: str) -> tuple[bool, str]:
+    """Gerente reseta senha de outro usuario"""
+    ok, msg = validar_senha_forte(senha_nova)
+    if not ok:
+        return False, msg
+    client = get_supabase_client()
+    try:
+        novo_hash = hash_senha(senha_nova)
+        client.table("usuarios").update({"senha_hash": novo_hash}).eq("id", user_id).execute()
+        return True, "Senha resetada."
+    except Exception:
+        return False, "Erro ao resetar senha."
 
 
 def listar_usuarios() -> list:
-    """Lista todos os usuarios (para gerente)"""
+    """Lista todos os usuarios (sem senha_hash)"""
     client = get_supabase_client()
     try:
         response = (
@@ -83,43 +221,53 @@ def listar_usuarios() -> list:
 
 
 def atualizar_status_usuario(user_id: int, ativo: bool) -> bool:
-    """Ativa ou desativa usuario"""
     client = get_supabase_client()
     try:
-        response = (
-            client.table("usuarios")
-            .update({"ativo": ativo})
-            .eq("id", user_id)
-            .execute()
-        )
+        response = client.table("usuarios").update({"ativo": ativo}).eq("id", user_id).execute()
         return bool(response.data)
     except Exception:
         return False
 
 
+# ---------- SESSAO ----------
+
 def usuario_logado() -> bool:
-    """Verifica se ha usuario logado na sessao"""
-    return st.session_state.get("autenticado", False)
+    """Verifica autenticacao + timeout de sessao"""
+    if not st.session_state.get("autenticado", False):
+        return False
+
+    # Verifica timeout
+    inicio = st.session_state.get("sessao_inicio")
+    if inicio is None:
+        logout()
+        return False
+
+    if datetime.now(timezone.utc) - inicio > timedelta(hours=SESSAO_DURACAO_HORAS):
+        logout()
+        st.warning(f"Sua sessao expirou ({SESSAO_DURACAO_HORAS}h). Faca login novamente.")
+        return False
+
+    return True
 
 
 def get_usuario_atual() -> dict | None:
-    """Retorna dados do usuario logado"""
     if usuario_logado():
         return st.session_state.get("usuario", None)
     return None
 
 
 def is_gerente() -> bool:
-    """Verifica se o usuario logado e gerente"""
     user = get_usuario_atual()
     return user is not None and user.get("perfil") == "gerente"
 
 
 def logout():
-    """Desloga o usuario"""
     st.session_state["autenticado"] = False
     st.session_state["usuario"] = None
+    st.session_state["sessao_inicio"] = None
 
+
+# ---------- RENDER ----------
 
 def render_login():
     """Renderiza pagina de login"""
@@ -150,9 +298,10 @@ def render_login():
             if not email or not senha:
                 st.error("Preencha email e senha.")
             else:
-                user = autenticar_usuario(email, senha)
+                user, erro = autenticar_usuario(email, senha)
                 if user:
                     st.session_state["autenticado"] = True
+                    st.session_state["sessao_inicio"] = datetime.now(timezone.utc)
                     st.session_state["usuario"] = {
                         "id": user["id"],
                         "nome": user["nome"],
@@ -161,7 +310,7 @@ def render_login():
                     }
                     st.rerun()
                 else:
-                    st.error("Email ou senha incorretos.")
+                    st.error(erro)
 
     st.markdown("""
     <div style="text-align:center;margin-top:2rem;color:#9CA3AF;font-size:0.75rem">

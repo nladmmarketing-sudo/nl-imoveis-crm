@@ -6,6 +6,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from utils.supabase_client import fetch_leads_jetimob, fetch_vendas, fetch_corretores_plantao, count_table
+from utils.auth import escape
 
 
 def render():
@@ -122,7 +123,7 @@ def render():
                 <div class="ranking-item">
                     <div class="rank-num {rank_class}">{pos}°</div>
                     <div style="flex:1">
-                        <div class="rank-name">{row['Corretor']}</div>
+                        <div class="rank-name">{escape(row['Corretor'])}</div>
                         <div style="height:8px;background:#EAF3FB;border-radius:4px;overflow:hidden;margin-top:4px">
                             <div style="width:{pct:.0f}%;height:100%;background:{'#F0A500' if pos == 1 else '#1C3882' if pos <= 3 else '#9CA3AF'};border-radius:4px"></div>
                         </div>
