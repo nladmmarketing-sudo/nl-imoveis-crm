@@ -4,28 +4,32 @@ Visao Geral - KPIs estrategicos e resumo executivo
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
-from utils.supabase_client import fetch_leads_jetimob, fetch_vendas, fetch_corretores_plantao, count_table
-from utils.auth import escape
+from utils.supabase_client import fetch_leads_jetimob, fetch_vendas
+from utils.auth import escape, is_admin
+from utils.filtros import aplicar_filtro
 
 
 def render():
-    st.markdown("""
+    periodo = st.session_state.get("periodo_global", "Ultimos 30 dias")
+
+    st.markdown(f"""
     <div class="nl-header">
         <div class="badge">Painel Estrategico</div>
         <h1>NL Imoveis — <span>Visao Geral</span></h1>
-        <div class="sub">CRECI 1440 J · Natal/RN · Dados em tempo real via Supabase</div>
+        <div class="sub">CRECI 1440 J · Natal/RN · Periodo: <strong>{escape(periodo)}</strong></div>
     </div>
     """, unsafe_allow_html=True)
 
-    # Load data
-    df_leads = fetch_leads_jetimob()
-    df_vendas = fetch_vendas()
+    # Carrega e filtra
+    df_leads_all = fetch_leads_jetimob()
+    df_vendas_all = fetch_vendas()
 
-    total_leads = len(df_leads) if not df_leads.empty else 0
-    total_vendas = len(df_vendas) if not df_vendas.empty else 0
+    df_leads = aplicar_filtro(df_leads_all, periodo, "created_at")
+    df_vendas = aplicar_filtro(df_vendas_all, periodo, "data_venda")
 
-    # VGV
+    total_leads = len(df_leads)
+    total_vendas = len(df_vendas)
+
     vgv = df_vendas["valor"].sum() if not df_vendas.empty and "valor" in df_vendas.columns else 0
     ticket_medio = vgv / total_vendas if total_vendas > 0 else 0
     taxa_conversao = (total_vendas / total_leads * 100) if total_leads > 0 else 0
@@ -36,12 +40,12 @@ def render():
         <div class="kpi-card">
             <div class="label">Total de Leads</div>
             <div class="num">{total_leads:,}</div>
-            <div class="sub">Jetimob CRM</div>
+            <div class="sub">Jetimob CRM · {escape(periodo)}</div>
         </div>
         <div class="kpi-card azul">
             <div class="label">Negocios Fechados</div>
             <div class="num">{total_vendas}</div>
-            <div class="sub">Vendas + Locacoes registradas</div>
+            <div class="sub">Vendas + Locacoes</div>
         </div>
         <div class="kpi-card green">
             <div class="label">VGV Total</div>
@@ -52,7 +56,7 @@ def render():
             <div class="label">Taxa de Conversao</div>
             <div class="num" style="color:{'#16A34A' if taxa_conversao > 1 else '#DC2626'}">{taxa_conversao:.2f}%</div>
             <div class="sub">Lead → Negocio fechado</div>
-            <span class="kpi-badge {'badge-green' if taxa_conversao > 1 else 'badge-red'}">{'Saudavel' if taxa_conversao > 1 else 'Abaixo do ideal (meta: 1%+)'}</span>
+            <span class="kpi-badge {'badge-green' if taxa_conversao > 1 else 'badge-red'}">{'Saudavel' if taxa_conversao > 1 else 'Abaixo do ideal'}</span>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -63,15 +67,19 @@ def render():
     with col1:
         st.markdown('<div class="chart-box"><h3>Leads ao Longo do Tempo</h3>', unsafe_allow_html=True)
         if not df_leads.empty and "created_at" in df_leads.columns:
-            df_leads["data"] = pd.to_datetime(df_leads["created_at"], errors="coerce").dt.date
-            timeline = df_leads.dropna(subset=["data"]).groupby("data").size().reset_index(name="Leads")
-            fig = px.area(timeline, x="data", y="Leads", color_discrete_sequence=["#1C3882"])
-            fig.update_layout(
-                height=320, margin=dict(l=0, r=0, t=10, b=0),
-                plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-                xaxis_title="", yaxis_title="Novos Leads"
-            )
-            st.plotly_chart(fig, use_container_width=True)
+            df_leads_copy = df_leads.copy()
+            df_leads_copy["data"] = pd.to_datetime(df_leads_copy["created_at"], errors="coerce").dt.date
+            timeline = df_leads_copy.dropna(subset=["data"]).groupby("data").size().reset_index(name="Leads")
+            if not timeline.empty:
+                fig = px.area(timeline, x="data", y="Leads", color_discrete_sequence=["#1C3882"])
+                fig.update_layout(
+                    height=320, margin=dict(l=0, r=0, t=10, b=0),
+                    plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+                    xaxis_title="", yaxis_title="Novos Leads"
+                )
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("Sem dados no periodo.")
         else:
             st.info("Sem dados de leads.")
         st.markdown('</div>', unsafe_allow_html=True)
@@ -102,7 +110,7 @@ def render():
         <div class="section-icon">🏆</div>
         <div>
             <h2>Ranking de Corretores — Volume de Leads</h2>
-            <p>Distribuicao de leads por corretor no Jetimob CRM</p>
+            <p>Distribuicao de leads por corretor no periodo</p>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -137,30 +145,58 @@ def render():
     else:
         st.info("Sem dados de corretores.")
 
-    # Recent leads
+    # Recent leads (PII reduzida)
     st.markdown("""
     <div class="section-hdr">
         <div class="section-icon">📋</div>
         <div>
             <h2>Ultimos Leads Recebidos</h2>
-            <p>10 leads mais recentes no sistema</p>
+            <p>Nome, email e codigo do imovel · Para telefone/detalhes, consulte o Jetimob CRM</p>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
     if not df_leads.empty:
-        cols_show = ["created_at", "nome", "email", "telefone", "origem", "corretor", "status"]
+        # PII: mostrar apenas nome, email, codigo_imovel, origem, corretor, status
+        cols_show = ["created_at", "nome", "email", "codigo_imovel", "origem", "corretor", "status"]
         available = [c for c in cols_show if c in df_leads.columns]
-        recent = df_leads.head(10)[available].copy()
-        rename = {"created_at": "Data", "nome": "Nome", "email": "Email", "telefone": "Telefone",
-                  "origem": "Origem", "corretor": "Corretor", "status": "Status"}
+        recent = df_leads.head(20)[available].copy()
+        rename = {
+            "created_at": "Data",
+            "nome": "Nome",
+            "email": "Email",
+            "codigo_imovel": "Codigo Imovel",
+            "origem": "Origem",
+            "corretor": "Corretor",
+            "status": "Status",
+        }
         recent = recent.rename(columns={k: v for k, v in rename.items() if k in recent.columns})
+
+        # Busca
+        busca = st.text_input("🔍 Buscar (nome, email, codigo, corretor)", placeholder="Digite pra filtrar...", key="busca_visao")
+        if busca:
+            mask = pd.Series([False] * len(recent))
+            for col in recent.columns:
+                mask |= recent[col].astype(str).str.contains(busca, case=False, na=False)
+            recent = recent[mask]
+
         st.dataframe(recent, use_container_width=True, hide_index=True)
+
+        # Export CSV
+        csv = recent.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            "📥 Exportar leads (CSV)",
+            data=csv,
+            file_name=f"leads_recentes_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.csv",
+            mime="text/csv",
+        )
+
+        st.caption(f"ℹ️ Para ver telefones e historico completo de cada lead, acesse o Jetimob CRM.")
 
     # Footer
     st.markdown("""
     <div class="nl-footer">
         <strong>NL Imoveis</strong> · Painel Estrategico · CRECI 1440 J · Natal/RN<br>
-        Dados atualizados em tempo real via Supabase + Jetimob CRM
+        Dados em tempo real via Supabase + Jetimob CRM
     </div>
     """, unsafe_allow_html=True)

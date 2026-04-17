@@ -1,17 +1,28 @@
 """
-Gerenciar Usuarios - Cadastro e controle de acesso (apenas gerentes)
+Gerenciar Usuarios - Cadastro e controle de acesso (apenas admin)
 """
 import streamlit as st
 from utils.auth import (
-    is_gerente, cadastrar_usuario, listar_usuarios,
+    is_admin, cadastrar_usuario, listar_usuarios,
     atualizar_status_usuario, get_usuario_atual,
     resetar_senha_por_gerente, escape
 )
+from utils.auditoria import registrar
+from utils.supabase_client import get_supabase_client
+
+
+def alterar_perfil(user_id: int, novo_perfil: str) -> bool:
+    client = get_supabase_client()
+    try:
+        client.table("usuarios").update({"perfil": novo_perfil}).eq("id", user_id).execute()
+        return True
+    except Exception:
+        return False
 
 
 def render():
-    if not is_gerente():
-        st.warning("Acesso restrito. Apenas gerentes podem gerenciar usuarios.")
+    if not is_admin():
+        st.warning("Acesso restrito. Apenas administradores podem gerenciar usuarios.")
         return
 
     st.markdown("""
@@ -41,13 +52,18 @@ def render():
         with col2:
             senha = st.text_input("Senha inicial", type="password",
                                    help="Minimo 8 caracteres, com letras e numeros")
-            perfil = st.selectbox("Perfil de acesso", ["corretor", "gerente"])
+            perfil = st.selectbox(
+                "Perfil de acesso",
+                ["gerente", "corretor", "admin"],
+                help="Admin: altera tudo · Gerente: ve tudo, nao altera · Corretor: acesso limitado"
+            )
 
         submit = st.form_submit_button("Cadastrar Usuario", use_container_width=True)
 
         if submit:
             ok, msg = cadastrar_usuario(nome, email, senha, perfil)
             if ok:
+                registrar("cadastrou_usuario", f"{nome} ({email}) perfil={perfil}")
                 st.success(msg)
                 st.rerun()
             else:
@@ -71,14 +87,19 @@ def render():
         for user in usuarios:
             status_text = "Ativo" if user["ativo"] else "Inativo"
             badge_cls = "badge-green" if user["ativo"] else "badge-red"
-            perfil_badge = "badge-gold" if user["perfil"] == "gerente" else "badge-blue"
+            perfil_badges = {
+                "admin": "badge-red",
+                "gerente": "badge-gold",
+                "corretor": "badge-blue",
+            }
+            perfil_badge = perfil_badges.get(user["perfil"], "badge-blue")
             is_self = user_atual and user["id"] == user_atual["id"]
             nome_safe = escape(user['nome'])
             email_safe = escape(user['email'])
             perfil_safe = escape(user['perfil'].title())
             inicial = escape(user['nome'][0].upper()) if user.get('nome') else "?"
 
-            col1, col2, col3 = st.columns([4, 1, 1])
+            col1, col2, col3, col4 = st.columns([4, 1, 1, 1])
             with col1:
                 st.markdown(f"""
                 <div style="display:flex;align-items:center;gap:1rem;padding:0.6rem 1rem;background:white;border-radius:10px;border:1px solid #D1E4F5;margin:0.3rem 0">
@@ -97,10 +118,12 @@ def render():
                 elif user["ativo"]:
                     if st.button("Desativar", key=f"desat_{user['id']}"):
                         atualizar_status_usuario(user["id"], False)
+                        registrar("desativou_usuario", f"{user['nome']} ({user['email']})")
                         st.rerun()
                 else:
                     if st.button("Ativar", key=f"ativ_{user['id']}", type="primary"):
                         atualizar_status_usuario(user["id"], True)
+                        registrar("ativou_usuario", f"{user['nome']} ({user['email']})")
                         st.rerun()
             with col3:
                 if not is_self:
@@ -111,13 +134,34 @@ def render():
                         if st.button("Confirmar", key=f"rsb_{user['id']}"):
                             ok, msg = resetar_senha_por_gerente(user["id"], nova)
                             if ok:
+                                registrar("resetou_senha", f"{user['nome']} ({user['email']})")
                                 st.success(msg)
                             else:
                                 st.error(msg)
+            with col4:
+                if not is_self:
+                    with st.popover("Alterar perfil"):
+                        st.caption(f"Perfil atual: {user['perfil']}")
+                        perfis = ["gerente", "corretor", "admin"]
+                        idx = perfis.index(user["perfil"]) if user["perfil"] in perfis else 0
+                        novo = st.selectbox("Novo perfil", perfis, index=idx, key=f"perf_{user['id']}")
+                        if st.button("Salvar perfil", key=f"perfb_{user['id']}"):
+                            if alterar_perfil(user["id"], novo):
+                                registrar("alterou_perfil", f"{user['nome']}: {user['perfil']} -> {novo}")
+                                st.success("Perfil atualizado.")
+                                st.rerun()
+                            else:
+                                st.error("Erro ao alterar perfil.")
+
+        # Resumo
+        admins = len([u for u in usuarios if u["perfil"] == "admin"])
+        gerentes = len([u for u in usuarios if u["perfil"] == "gerente"])
+        corretores = len([u for u in usuarios if u["perfil"] == "corretor"])
+        ativos = len([u for u in usuarios if u["ativo"]])
 
         st.markdown(f"""
         <div style="margin-top:1rem;padding:0.8rem 1.2rem;background:#EAF3FB;border-radius:10px;font-size:0.82rem;color:#1C3882">
-            <strong>{len([u for u in usuarios if u['ativo']])} usuarios ativos</strong> de {len(usuarios)} cadastrados
+            <strong>{ativos} ativos</strong> de {len(usuarios)} · {admins} admin(s) · {gerentes} gerente(s) · {corretores} corretor(es)
         </div>
         """, unsafe_allow_html=True)
     else:
@@ -126,6 +170,6 @@ def render():
     st.markdown("""
     <div class="nl-footer">
         <strong>NL Imoveis</strong> · Painel Estrategico · CRECI 1440 J · Natal/RN<br>
-        Gerenciamento de acesso · Apenas gerentes
+        Gerenciamento de acesso · Apenas admin
     </div>
     """, unsafe_allow_html=True)

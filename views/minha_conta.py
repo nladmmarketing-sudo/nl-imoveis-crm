@@ -3,6 +3,7 @@ Minha Conta - Alterar senha do proprio usuario
 """
 import streamlit as st
 from utils.auth import get_usuario_atual, alterar_senha, usuario_logado, escape
+from utils.auditoria import registrar
 
 
 def render():
@@ -47,6 +48,7 @@ def render():
             else:
                 ok, msg = alterar_senha(user["id"], senha_atual, senha_nova)
                 if ok:
+                    registrar("alterou_senha", "senha propria alterada")
                     st.success(msg)
                 else:
                     st.error(msg)

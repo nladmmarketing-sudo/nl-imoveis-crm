@@ -6,19 +6,26 @@ import pandas as pd
 import plotly.express as px
 from utils.supabase_client import fetch_leads_jetimob, fetch_vendas
 from utils.auth import escape
+from utils.filtros import aplicar_filtro
 
 
 def render():
-    st.markdown("""
+    periodo = st.session_state.get("periodo_global", "Ultimos 30 dias")
+
+    st.markdown(f"""
     <div class="nl-header">
         <div class="badge">Equipe de Vendas</div>
         <h1>Performance <span>Vendas</span></h1>
-        <div class="sub">Acompanhamento de leads, funil e fechamentos da equipe de vendas</div>
+        <div class="sub">Leads, funil e fechamentos · Periodo: <strong>{escape(periodo)}</strong></div>
     </div>
     """, unsafe_allow_html=True)
 
-    df_vendas = fetch_vendas()
-    df_leads = fetch_leads_jetimob()
+    df_vendas_all = fetch_vendas()
+    df_leads_all = fetch_leads_jetimob()
+
+    # Aplica filtro de periodo
+    df_vendas = aplicar_filtro(df_vendas_all, periodo, "data_venda")
+    df_leads = aplicar_filtro(df_leads_all, periodo, "created_at")
 
     # Filtrar vendas (tipo_negocio = venda)
     if not df_vendas.empty and "tipo_negocio" in df_vendas.columns:
@@ -36,7 +43,7 @@ def render():
         <div class="kpi-card">
             <div class="label">Vendas Fechadas</div>
             <div class="num">{total_vendas}</div>
-            <div class="sub">Registradas no sistema</div>
+            <div class="sub">{escape(periodo)}</div>
         </div>
         <div class="kpi-card green">
             <div class="label">VGV Vendas</div>
@@ -49,7 +56,7 @@ def render():
             <div class="sub">por venda fechada</div>
         </div>
         <div class="kpi-card">
-            <div class="label">Total Leads</div>
+            <div class="label">Leads no periodo</div>
             <div class="num">{len(df_leads):,}</div>
             <div class="sub">Jetimob CRM</div>
         </div>
@@ -62,7 +69,7 @@ def render():
         <div class="section-icon">🏆</div>
         <div>
             <h2>Ranking Corretores — Vendas</h2>
-            <p>Performance individual por volume e VGV</p>
+            <p>Performance individual por volume e VGV no periodo</p>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -76,18 +83,17 @@ def render():
         max_vgv = perf["vgv"].max() if not perf.empty else 1
 
         html = ""
-        for i, row in perf.iterrows():
-            pos = len(html.split("ranking-item"))
-            rank_class = f"rank-{pos}" if pos <= 3 else "rank-other"
+        for i, (_, row) in enumerate(perf.iterrows(), start=1):
+            rank_class = f"rank-{i}" if i <= 3 else "rank-other"
             pct = row["vgv"] / max_vgv * 100 if max_vgv > 0 else 0
             html += f"""
             <div class="ranking-item">
-                <div class="rank-num {rank_class}">{pos}°</div>
+                <div class="rank-num {rank_class}">{i}°</div>
                 <div style="flex:1">
                     <div class="rank-name">{escape(row['corretor'])}</div>
                     <div class="rank-sub">{row['vendas']} venda(s)</div>
                     <div style="height:8px;background:#EAF3FB;border-radius:4px;overflow:hidden;margin-top:4px">
-                        <div style="width:{pct:.0f}%;height:100%;background:{'#F0A500' if pos <= 1 else '#1C3882'};border-radius:4px"></div>
+                        <div style="width:{pct:.0f}%;height:100%;background:{'#F0A500' if i == 1 else '#1C3882'};border-radius:4px"></div>
                     </div>
                 </div>
                 <div class="rank-value">R${row['vgv']:,.0f}</div>
@@ -95,15 +101,15 @@ def render():
             """
         st.markdown(html, unsafe_allow_html=True)
     else:
-        st.info("Registre vendas no sistema para ver o ranking.")
+        st.info("Nenhuma venda no periodo selecionado.")
 
-    # Tabela de vendas
+    # Tabela de vendas com busca + export
     st.markdown("""
     <div class="section-hdr">
         <div class="section-icon">📋</div>
         <div>
             <h2>Detalhamento de Vendas</h2>
-            <p>Todas as vendas registradas</p>
+            <p>Vendas registradas no periodo</p>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -116,9 +122,26 @@ def render():
                   "codigo_imovel": "Codigo", "bairro": "Bairro", "valor": "Valor (R$)",
                   "corretor": "Corretor", "origem_lead": "Origem"}
         display = display.rename(columns={k: v for k, v in rename.items() if k in display.columns})
+
+        busca = st.text_input("🔍 Buscar (cliente, codigo, bairro, corretor)", placeholder="Digite pra filtrar...", key="busca_vendas")
+        if busca:
+            mask = pd.Series([False] * len(display))
+            for col in display.columns:
+                mask |= display[col].astype(str).str.contains(busca, case=False, na=False)
+            display = display[mask]
+
         st.dataframe(display, use_container_width=True, hide_index=True)
+
+        csv = display.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            "📥 Exportar (CSV)",
+            data=csv,
+            file_name=f"vendas_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.csv",
+            mime="text/csv",
+            key="dl_vendas"
+        )
     else:
-        st.info("Nenhuma venda registrada ainda.")
+        st.info("Nenhuma venda registrada no periodo.")
 
     # Charts
     col1, col2 = st.columns(2)

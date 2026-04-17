@@ -5,9 +5,10 @@ Dashboard gerencial para acompanhamento de vendas, locacao e performance
 import streamlit as st
 from utils.auth import (
     usuario_logado, render_login, get_usuario_atual,
-    is_gerente, logout, escape
+    is_admin, is_gerente, logout, escape
 )
 from utils.supabase_client import limpar_cache
+from utils.filtros import seletor_periodo
 
 st.set_page_config(
     page_title="NL Imoveis - Painel Estrategico",
@@ -247,7 +248,8 @@ def main():
 
         # Info do usuario logado
         if user:
-            perfil_label = "Gerente" if user["perfil"] == "gerente" else "Corretor"
+            perfil_labels = {"admin": "Admin", "gerente": "Gerente", "corretor": "Corretor"}
+            perfil_label = perfil_labels.get(user["perfil"], "Usuario")
             st.markdown(f"**{escape(user['nome'])}**")
             st.caption(f"{perfil_label} · {escape(user['email'])}")
             if st.button("Sair", use_container_width=True):
@@ -255,10 +257,17 @@ def main():
                 st.rerun()
             st.markdown("---")
 
+        # Filtro de periodo global
+        periodo = seletor_periodo()
+        st.session_state["periodo_global"] = periodo
+
+        st.markdown("---")
+
         # Menu de navegacao
         paginas = ["Visao Geral", "Equipe Vendas", "Equipe Locacao", "Origens de Leads", "Metas & Projecoes", "Minha Conta"]
-        if is_gerente():
+        if is_admin():
             paginas.insert(-1, "Gerenciar Usuarios")
+            paginas.insert(-1, "Auditoria")
 
         pagina = st.radio(
             "Navegacao",
@@ -277,7 +286,7 @@ def main():
             st.rerun()
 
         st.markdown("---")
-        st.caption("Painel Estrategico v1.1")
+        st.caption("Painel Estrategico v1.2")
         st.caption("Cache: 5 min · Supabase + Jetimob")
 
     if pagina == "Visao Geral":
@@ -298,6 +307,9 @@ def main():
     elif pagina == "Gerenciar Usuarios":
         from views import usuarios
         usuarios.render()
+    elif pagina == "Auditoria":
+        from views import auditoria_view
+        auditoria_view.render()
     elif pagina == "Minha Conta":
         from views import minha_conta
         minha_conta.render()

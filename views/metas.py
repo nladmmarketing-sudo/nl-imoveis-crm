@@ -6,9 +6,10 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from utils.supabase_client import fetch_vendas, fetch_leads_jetimob
-from utils.auth import is_gerente
+from utils.supabase_client import fetch_vendas, fetch_leads_jetimob, limpar_cache
+from utils.auth import is_admin
 from utils.config import get_config_int, set_config
+from utils.auditoria import registrar
 
 
 # Valores padrao iniciais
@@ -37,7 +38,7 @@ def render():
     meta_leads = get_config_int("meta_leads", META_LEADS_PADRAO)
 
     # Secao de configuracao — so gerente edita
-    if is_gerente():
+    if is_admin():
         st.markdown("""
         <div class="section-hdr">
             <div class="section-icon">🎯</div>
@@ -73,6 +74,9 @@ def render():
                     set_config("meta_leads", novo_leads),
                 ])
                 if ok:
+                    registrar("alterou_metas",
+                              f"VGV={novo_vgv}, vendas={novo_vendas}, locacoes={novo_locacoes}, leads={novo_leads}")
+                    limpar_cache()
                     st.success("Metas atualizadas!")
                     st.rerun()
                 else:

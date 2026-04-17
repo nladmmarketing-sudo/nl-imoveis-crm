@@ -142,7 +142,7 @@ def cadastrar_usuario(nome: str, email: str, senha: str, perfil: str = "corretor
     if not ok:
         return False, msg
 
-    if perfil not in ("gerente", "corretor"):
+    if perfil not in ("admin", "gerente", "corretor"):
         return False, "Perfil invalido."
 
     client = get_supabase_client()
@@ -256,12 +256,39 @@ def get_usuario_atual() -> dict | None:
     return None
 
 
-def is_gerente() -> bool:
+def is_admin() -> bool:
+    """Admin = Anderson = quem pode alterar tudo"""
     user = get_usuario_atual()
-    return user is not None and user.get("perfil") == "gerente"
+    return user is not None and user.get("perfil") == "admin"
+
+
+def is_gerente() -> bool:
+    """Gerente = quem visualiza o painel (inclui admin que ve tudo tambem)"""
+    user = get_usuario_atual()
+    return user is not None and user.get("perfil") in ("admin", "gerente")
+
+
+def is_corretor() -> bool:
+    """Corretor = acesso restrito (sem dados sensiveis de todos os leads)"""
+    user = get_usuario_atual()
+    return user is not None and user.get("perfil") == "corretor"
 
 
 def logout():
+    try:
+        # Registra logout no log antes de limpar sessao
+        user = st.session_state.get("usuario")
+        if user:
+            from utils.supabase_client import get_supabase_client
+            client = get_supabase_client()
+            client.table("auditoria").insert({
+                "usuario_id": user.get("id"),
+                "usuario_email": user.get("email", ""),
+                "acao": "logout",
+                "detalhes": "",
+            }).execute()
+    except Exception:
+        pass
     st.session_state["autenticado"] = False
     st.session_state["usuario"] = None
     st.session_state["sessao_inicio"] = None
@@ -308,8 +335,29 @@ def render_login():
                         "email": user["email"],
                         "perfil": user["perfil"],
                     }
+                    # Registra login no log de auditoria
+                    try:
+                        client = get_supabase_client()
+                        client.table("auditoria").insert({
+                            "usuario_id": user["id"],
+                            "usuario_email": user["email"],
+                            "acao": "login_sucesso",
+                            "detalhes": f"perfil: {user['perfil']}",
+                        }).execute()
+                    except Exception:
+                        pass
                     st.rerun()
                 else:
+                    # Registra tentativa falha
+                    try:
+                        client = get_supabase_client()
+                        client.table("auditoria").insert({
+                            "usuario_email": email.lower().strip() or "sem_email",
+                            "acao": "login_falha",
+                            "detalhes": erro,
+                        }).execute()
+                    except Exception:
+                        pass
                     st.error(erro)
 
     st.markdown("""
