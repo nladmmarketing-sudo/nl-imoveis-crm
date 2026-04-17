@@ -1,11 +1,21 @@
 """
 Metas & Projecoes - Acompanhamento de metas gerenciais
+Somente gerentes podem editar. Corretores visualizam.
 """
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from utils.supabase_client import fetch_vendas, fetch_leads_jetimob
+from utils.auth import is_gerente
+from utils.config import get_config_int, set_config
+
+
+# Valores padrao iniciais
+META_VGV_PADRAO = 3000000
+META_VENDAS_PADRAO = 10
+META_LOCACOES_PADRAO = 30
+META_LEADS_PADRAO = 1500
 
 
 def render():
@@ -20,26 +30,89 @@ def render():
     df_vendas = fetch_vendas()
     df_leads = fetch_leads_jetimob()
 
-    # Configuracao de metas (editavel)
-    st.markdown("""
-    <div class="section-hdr">
-        <div class="section-icon">🎯</div>
-        <div>
-            <h2>Configurar Metas</h2>
-            <p>Defina as metas do periodo para acompanhamento</p>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    # Carregar metas salvas do banco
+    meta_vgv = get_config_int("meta_vgv", META_VGV_PADRAO)
+    meta_vendas = get_config_int("meta_vendas", META_VENDAS_PADRAO)
+    meta_locacoes = get_config_int("meta_locacoes", META_LOCACOES_PADRAO)
+    meta_leads = get_config_int("meta_leads", META_LEADS_PADRAO)
 
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        meta_vgv = st.number_input("Meta VGV Vendas (R$)", value=3000000, step=100000, format="%d")
-    with col2:
-        meta_vendas = st.number_input("Meta Vendas (qtd)", value=10, step=1)
-    with col3:
-        meta_locacoes = st.number_input("Meta Locacoes (qtd)", value=30, step=1)
-    with col4:
-        meta_leads = st.number_input("Meta Leads/mes", value=1500, step=100)
+    # Secao de configuracao — so gerente edita
+    if is_gerente():
+        st.markdown("""
+        <div class="section-hdr">
+            <div class="section-icon">🎯</div>
+            <div>
+                <h2>Configurar Metas</h2>
+                <p>Apenas gerentes podem editar. As alteracoes ficam salvas e visiveis para toda a equipe.</p>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        with st.form("form_metas"):
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                novo_vgv = st.number_input("Meta VGV Vendas (R$)",
+                                            value=meta_vgv, step=100000, format="%d")
+            with col2:
+                novo_vendas = st.number_input("Meta Vendas (qtd)",
+                                               value=meta_vendas, step=1)
+            with col3:
+                novo_locacoes = st.number_input("Meta Locacoes (qtd)",
+                                                 value=meta_locacoes, step=1)
+            with col4:
+                novo_leads = st.number_input("Meta Leads/mes",
+                                              value=meta_leads, step=100)
+
+            salvar = st.form_submit_button("Salvar Metas", use_container_width=True)
+
+            if salvar:
+                ok = all([
+                    set_config("meta_vgv", novo_vgv),
+                    set_config("meta_vendas", novo_vendas),
+                    set_config("meta_locacoes", novo_locacoes),
+                    set_config("meta_leads", novo_leads),
+                ])
+                if ok:
+                    st.success("Metas atualizadas!")
+                    st.rerun()
+                else:
+                    st.error("Erro ao salvar metas.")
+    else:
+        # Corretor ve metas como texto, sem opcao de editar
+        st.markdown("""
+        <div class="section-hdr">
+            <div class="section-icon">🎯</div>
+            <div>
+                <h2>Metas do Periodo</h2>
+                <p>Definidas pela gerencia</p>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.markdown(f"""
+        <div class="kpi-grid">
+            <div class="kpi-card">
+                <div class="label">Meta VGV Vendas</div>
+                <div class="num">R${meta_vgv:,.0f}</div>
+                <div class="sub">Volume geral de vendas</div>
+            </div>
+            <div class="kpi-card azul">
+                <div class="label">Meta Vendas</div>
+                <div class="num">{meta_vendas}</div>
+                <div class="sub">Vendas fechadas</div>
+            </div>
+            <div class="kpi-card">
+                <div class="label">Meta Locacoes</div>
+                <div class="num">{meta_locacoes}</div>
+                <div class="sub">Locacoes fechadas</div>
+            </div>
+            <div class="kpi-card azul">
+                <div class="label">Meta Leads/mes</div>
+                <div class="num">{meta_leads:,}</div>
+                <div class="sub">Leads gerados</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
     # Calcular realizado
     if not df_vendas.empty and "tipo_negocio" in df_vendas.columns:
@@ -144,6 +217,6 @@ def render():
     st.markdown("""
     <div class="nl-footer">
         <strong>NL Imoveis</strong> · Painel Estrategico · CRECI 1440 J · Natal/RN<br>
-        Metas configuraveis pelo gerente · Dados em tempo real
+        Metas salvas no Supabase · Dados em tempo real
     </div>
     """, unsafe_allow_html=True)
