@@ -4,7 +4,7 @@ Auditoria — log de acoes do sistema (apenas admin)
 import streamlit as st
 import pandas as pd
 from utils.auth import is_admin
-from utils.auditoria import listar_recentes
+from utils.auditoria import listar_recentes, contar_registros, limpar_antigos, registrar
 
 
 def render():
@@ -19,6 +19,36 @@ def render():
         <div class="sub">Registro de acoes importantes no sistema</div>
     </div>
     """, unsafe_allow_html=True)
+
+    # Stats das tabelas
+    stats = contar_registros()
+
+    st.markdown(f"""
+    <div class="kpi-grid">
+        <div class="kpi-card">
+            <div class="label">Registros de Auditoria</div>
+            <div class="num">{stats['auditoria']:,}</div>
+            <div class="sub">Mantidos por 90 dias</div>
+        </div>
+        <div class="kpi-card azul">
+            <div class="label">Tentativas de Login</div>
+            <div class="num">{stats['login_attempts']:,}</div>
+            <div class="sub">Mantidas por 30 dias</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Botao de limpeza manual
+    col1, col2 = st.columns([3, 1])
+    with col2:
+        with st.popover("🧹 Limpar antigos"):
+            st.caption("Apaga registros com mais de 90d (auditoria) e 30d (login_attempts)")
+            if st.button("Confirmar limpeza", key="btn_limpar", type="primary"):
+                resultado = limpar_antigos()
+                registrar("limpeza_manual",
+                          f"apagou {resultado['auditoria']} de auditoria e {resultado['login_attempts']} de login_attempts")
+                st.success(f"Limpeza concluida. Auditoria: -{resultado['auditoria']}, Login: -{resultado['login_attempts']}")
+                st.rerun()
 
     st.markdown("""
     <div class="section-hdr">

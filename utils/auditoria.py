@@ -42,3 +42,51 @@ def listar_recentes(limit: int = 100) -> list:
         return response.data or []
     except Exception:
         return []
+
+
+def contar_registros() -> dict:
+    """Conta registros nas tabelas de auditoria e login_attempts"""
+    client = get_supabase_client()
+    try:
+        r1 = client.table("auditoria").select("id", count="exact").execute()
+        r2 = client.table("login_attempts").select("id", count="exact").execute()
+        return {
+            "auditoria": r1.count or 0,
+            "login_attempts": r2.count or 0,
+        }
+    except Exception:
+        return {"auditoria": 0, "login_attempts": 0}
+
+
+def limpar_antigos(dias_auditoria: int = 90, dias_login: int = 30) -> dict:
+    """
+    Apaga registros antigos das tabelas.
+    Retorna dict com quantidade apagada de cada tabela.
+    """
+    from datetime import datetime, timedelta, timezone
+    client = get_supabase_client()
+    resultado = {"auditoria": 0, "login_attempts": 0}
+
+    try:
+        # Conta antes
+        antes_aud = client.table("auditoria").select("id", count="exact").execute().count or 0
+        antes_log = client.table("login_attempts").select("id", count="exact").execute().count or 0
+
+        # Apaga auditoria antiga
+        corte_aud = (datetime.now(timezone.utc) - timedelta(days=dias_auditoria)).isoformat()
+        client.table("auditoria").delete().lt("criado_em", corte_aud).execute()
+
+        # Apaga login_attempts antigos
+        corte_log = (datetime.now(timezone.utc) - timedelta(days=dias_login)).isoformat()
+        client.table("login_attempts").delete().lt("criado_em", corte_log).execute()
+
+        # Conta depois
+        depois_aud = client.table("auditoria").select("id", count="exact").execute().count or 0
+        depois_log = client.table("login_attempts").select("id", count="exact").execute().count or 0
+
+        resultado["auditoria"] = antes_aud - depois_aud
+        resultado["login_attempts"] = antes_log - depois_log
+    except Exception:
+        pass
+
+    return resultado
