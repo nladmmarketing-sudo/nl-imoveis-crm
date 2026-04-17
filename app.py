@@ -229,6 +229,11 @@ st.markdown("""
     footer {visibility: hidden;}
     header {visibility: hidden;}
 
+    /* Esconde o menu automatico do Streamlit (gerado da pasta pages/) */
+    [data-testid="stSidebarNav"] { display: none !important; }
+    div[data-testid="stSidebarNav"] { display: none !important; }
+    section[data-testid="stSidebar"] > div > div:first-child > div:first-child { display: none !important; }
+
     @media(max-width: 768px) {
         .kpi-grid { grid-template-columns: repeat(2, 1fr); }
         .funil-step { grid-template-columns: 90px 45px 1fr 40px; }
