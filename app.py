@@ -230,6 +230,26 @@ st.markdown("""
     footer {visibility: hidden;}
     header {visibility: hidden;}
 
+    /* Esconde COMPLETAMENTE o menu automatico gerado pelo Streamlit */
+    [data-testid="stSidebarNav"],
+    [data-testid="stSidebarNavItems"],
+    [data-testid="stSidebarNavLink"],
+    [data-testid="stSidebarNavSeparator"],
+    div[class*="stSidebarNav"],
+    section[data-testid="stSidebar"] ul,
+    section[data-testid="stSidebar"] > div:first-child > div:nth-child(1) > div:nth-child(1) {
+        display: none !important;
+        visibility: hidden !important;
+        height: 0 !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    /* Remove o padding extra do topo do sidebar */
+    section[data-testid="stSidebar"] > div:first-child {
+        padding-top: 1rem !important;
+    }
+
     @media(max-width: 768px) {
         .kpi-grid { grid-template-columns: repeat(2, 1fr); }
         .funil-step { grid-template-columns: 90px 45px 1fr 40px; }
