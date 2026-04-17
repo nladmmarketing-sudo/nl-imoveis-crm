@@ -7,6 +7,7 @@ from utils.auth import (
     usuario_logado, render_login, get_usuario_atual,
     is_gerente, logout, escape
 )
+from utils.supabase_client import limpar_cache
 
 st.set_page_config(
     page_title="NL Imoveis - Painel Estrategico",
@@ -267,8 +268,17 @@ def main():
         )
 
         st.markdown("---")
-        st.caption("Painel Estrategico v1.0")
-        st.caption("Atualizado em tempo real via Supabase")
+
+        # Botao de atualizar dados (limpa cache)
+        if st.button("🔄 Atualizar dados", use_container_width=True,
+                     help="Recarrega os dados mais recentes do Supabase (cache de 5 min)"):
+            limpar_cache()
+            st.success("Cache limpo! Dados sendo recarregados...")
+            st.rerun()
+
+        st.markdown("---")
+        st.caption("Painel Estrategico v1.1")
+        st.caption("Cache: 5 min · Supabase + Jetimob")
 
     if pagina == "Visao Geral":
         from pages import visao_geral
