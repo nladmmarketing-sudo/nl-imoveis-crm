@@ -260,9 +260,8 @@ def main():
                 st.rerun()
             st.markdown("---")
 
-        # Filtro de periodo global
-        periodo = seletor_periodo()
-        st.session_state["periodo_global"] = periodo
+        # Filtro de periodo global (a propria key salva em session_state)
+        seletor_periodo()
 
         st.markdown("---")
 
