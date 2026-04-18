@@ -42,9 +42,10 @@ def aplicar_filtro(df: pd.DataFrame, periodo: str, coluna_data: str = "created_a
 
     valor = PERIODOS.get(periodo)
 
-    # Converte coluna pra datetime
+    # Converte coluna pra datetime (tz-naive para evitar comparacoes mistas)
     df = df.copy()
-    df["_data_filtro"] = pd.to_datetime(df[coluna_data], errors="coerce")
+    df["_data_filtro"] = pd.to_datetime(df[coluna_data], errors="coerce", utc=True)
+    df["_data_filtro"] = df["_data_filtro"].dt.tz_localize(None)
     df = df.dropna(subset=["_data_filtro"])
 
     agora = datetime.now()
