@@ -2,11 +2,14 @@
 Sistema de Autenticacao - NL Imoveis CRM
 Login com bcrypt, rate limiting, timeout de sessao e controle de perfis.
 """
+from __future__ import annotations  # compatibilidade Python 3.9 com type hints X | None
 import re
 import time
 import html
+import unicodedata
 import streamlit as st
 import bcrypt
+import pandas as pd
 from datetime import datetime, timedelta, timezone
 from utils.supabase_client import get_supabase_client
 
@@ -127,10 +130,17 @@ def autenticar_usuario(email: str, senha: str) -> tuple[dict | None, str]:
         return None, "Nao foi possivel autenticar. Tente novamente."
 
 
-def cadastrar_usuario(nome: str, email: str, senha: str, perfil: str = "corretor") -> tuple[bool, str]:
+def cadastrar_usuario(
+    nome: str,
+    email: str,
+    senha: str,
+    perfil: str = "corretor",
+    corretor_nome_jetimob: str | None = None,
+) -> tuple[bool, str]:
     """Cadastra novo usuario. Retorna (sucesso, mensagem)."""
     nome = nome.strip()
     email = email.lower().strip()
+    nome_jt = (corretor_nome_jetimob or "").strip() or None
 
     if not nome or not email or not senha:
         return False, "Preencha todos os campos."
@@ -142,8 +152,11 @@ def cadastrar_usuario(nome: str, email: str, senha: str, perfil: str = "corretor
     if not ok:
         return False, msg
 
-    if perfil not in ("admin", "gerente", "corretor"):
+    if perfil not in ("admin", "gerente", "corretor", "marketing"):
         return False, "Perfil invalido."
+
+    if perfil == "corretor" and not nome_jt:
+        return False, "Para perfil corretor, informe o nome exato como aparece no Jetimob."
 
     client = get_supabase_client()
     try:
@@ -155,6 +168,7 @@ def cadastrar_usuario(nome: str, email: str, senha: str, perfil: str = "corretor
                 "senha_hash": hash_senha(senha),
                 "perfil": perfil,
                 "ativo": True,
+                "corretor_nome_jetimob": nome_jt,
             })
             .execute()
         )
@@ -211,7 +225,7 @@ def listar_usuarios() -> list:
     try:
         response = (
             client.table("usuarios")
-            .select("id, nome, email, perfil, ativo, criado_em")
+            .select("id, nome, email, perfil, ativo, criado_em, corretor_nome_jetimob")
             .order("criado_em", desc=True)
             .execute()
         )
@@ -224,6 +238,22 @@ def atualizar_status_usuario(user_id: int, ativo: bool) -> bool:
     client = get_supabase_client()
     try:
         response = client.table("usuarios").update({"ativo": ativo}).eq("id", user_id).execute()
+        return bool(response.data)
+    except Exception:
+        return False
+
+
+def atualizar_corretor_jetimob(user_id: int, nome_jetimob: str) -> bool:
+    """Atualiza o nome do corretor no Jetimob para um usuario."""
+    client = get_supabase_client()
+    try:
+        valor = (nome_jetimob or "").strip() or None
+        response = (
+            client.table("usuarios")
+            .update({"corretor_nome_jetimob": valor})
+            .eq("id", user_id)
+            .execute()
+        )
         return bool(response.data)
     except Exception:
         return False
@@ -272,6 +302,63 @@ def is_corretor() -> bool:
     """Corretor = acesso restrito (sem dados sensiveis de todos os leads)"""
     user = get_usuario_atual()
     return user is not None and user.get("perfil") == "corretor"
+
+
+def is_marketing() -> bool:
+    """Marketing = monitora todo o dashboard (visibilidade igual a gerente)"""
+    user = get_usuario_atual()
+    return user is not None and user.get("perfil") == "marketing"
+
+
+def pode_ver_tudo() -> bool:
+    """True para admin, gerente e marketing. False para corretor / nao-logado."""
+    return is_admin() or is_gerente() or is_marketing()
+
+
+def _normalize(s) -> str:
+    """Normaliza string para comparacao: NFKD + remove acentos + strip + casefold.
+    'Joao Silva ' e 'JOAO  SILVA' viram iguais; 'Joao' e 'João' tambem.
+    """
+    return (
+        unicodedata.normalize("NFKD", str(s or ""))
+        .encode("ASCII", "ignore")
+        .decode()
+        .strip()
+        .casefold()
+    )
+
+
+def filtrar_por_perfil(df: pd.DataFrame, coluna_corretor: str = "corretor") -> pd.DataFrame:
+    """
+    Aplica filtro de visibilidade por perfil (defesa em profundidade no backend).
+    - Admin/Gerente/Marketing: retorna df inalterado
+    - Corretor: retorna apenas linhas onde coluna_corretor casa com corretor_nome_jetimob
+      (comparacao normalizada: ignora case, acento, espaco)
+    - Corretor sem mapeamento, sem usuario logado, perfil desconhecido,
+      ou coluna ausente: retorna DataFrame vazio (fail-closed)
+    """
+    user = get_usuario_atual()
+    if user is None:
+        return df.iloc[0:0]
+
+    perfil = (user.get("perfil") or "").lower()
+    if perfil in ("admin", "gerente", "marketing"):
+        return df
+
+    if perfil == "corretor":
+        nome_jt = (user.get("corretor_nome_jetimob") or "").strip()
+        if not nome_jt:
+            return df.iloc[0:0]
+        if df.empty:
+            return df
+        if coluna_corretor not in df.columns:
+            # Fail-closed: coluna esperada nao existe, nao da pra filtrar com seguranca
+            return df.iloc[0:0]
+        alvo = _normalize(nome_jt)
+        return df[df[coluna_corretor].apply(_normalize) == alvo]
+
+    # Perfil desconhecido — fail-closed
+    return df.iloc[0:0]
 
 
 def logout():
@@ -334,6 +421,7 @@ def render_login():
                         "nome": user["nome"],
                         "email": user["email"],
                         "perfil": user["perfil"],
+                        "corretor_nome_jetimob": user.get("corretor_nome_jetimob"),
                     }
                     # Registra login no log de auditoria
                     try:

@@ -5,11 +5,20 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from utils.supabase_client import fetch_leads_jetimob, fetch_vendas
-from utils.auth import escape, is_admin
+from utils.auth import escape, is_admin, is_corretor, filtrar_por_perfil, get_usuario_atual, pode_ver_tudo
 from utils.filtros import aplicar_filtro
 
 
 def render():
+    # Guard de sessao + mapeamento (defesa em profundidade)
+    user = get_usuario_atual()
+    if not user:
+        st.warning("Sessao expirada. Faca login novamente.")
+        st.stop()
+    if is_corretor() and not (user.get("corretor_nome_jetimob") or "").strip():
+        st.error("Seu cadastro nao tem 'nome no Jetimob' configurado. Contate o admin.")
+        st.stop()
+
     periodo = st.session_state.get("periodo_global", "Ultimos 30 dias")
 
     st.markdown(f"""
@@ -20,9 +29,9 @@ def render():
     </div>
     """, unsafe_allow_html=True)
 
-    # Carrega e filtra
-    df_leads_all = fetch_leads_jetimob()
-    df_vendas_all = fetch_vendas()
+    # Filtra por perfil ANTES de qualquer agregacao
+    df_leads_all = filtrar_por_perfil(fetch_leads_jetimob(), "corretor")
+    df_vendas_all = filtrar_por_perfil(fetch_vendas(), "corretor")
 
     df_leads = aplicar_filtro(df_leads_all, periodo, "created_at")
     df_vendas = aplicar_filtro(df_vendas_all, periodo, "data_venda")
@@ -34,21 +43,26 @@ def render():
     ticket_medio = vgv / total_vendas if total_vendas > 0 else 0
     taxa_conversao = (total_vendas / total_leads * 100) if total_leads > 0 else 0
 
+    # Labels dinamicos: corretor ve "Meu/Minhas", outros perfis ve agregado
+    label_leads = "Meus Leads" if is_corretor() else "Total de Leads"
+    label_negocios = "Minhas Vendas" if is_corretor() else "Negocios Fechados"
+    label_vgv = "Meu VGV" if is_corretor() else "VGV Total"
+
     # KPIs
     st.markdown(f"""
     <div class="kpi-grid">
         <div class="kpi-card">
-            <div class="label">Total de Leads</div>
+            <div class="label">{label_leads}</div>
             <div class="num">{total_leads:,}</div>
             <div class="sub">Jetimob CRM · {escape(periodo)}</div>
         </div>
         <div class="kpi-card azul">
-            <div class="label">Negocios Fechados</div>
+            <div class="label">{label_negocios}</div>
             <div class="num">{total_vendas}</div>
             <div class="sub">Vendas + Locacoes</div>
         </div>
         <div class="kpi-card green">
-            <div class="label">VGV Total</div>
+            <div class="label">{label_vgv}</div>
             <div class="num" style="color:#16A34A">R${vgv:,.0f}</div>
             <div class="sub">Ticket medio: R${ticket_medio:,.0f}</div>
         </div>
@@ -104,46 +118,47 @@ def render():
             st.info("Sem dados de origem.")
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # Ranking Corretores
-    st.markdown("""
-    <div class="section-hdr">
-        <div class="section-icon">🏆</div>
-        <div>
-            <h2>Ranking de Corretores — Volume de Leads</h2>
-            <p>Distribuicao de leads por corretor no periodo</p>
+    # Ranking Corretores — apenas para perfis que veem todos os corretores
+    if pode_ver_tudo():
+        st.markdown("""
+        <div class="section-hdr">
+            <div class="section-icon">🏆</div>
+            <div>
+                <h2>Ranking de Corretores — Volume de Leads</h2>
+                <p>Distribuicao de leads por corretor no periodo</p>
+            </div>
         </div>
-    </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
 
-    if not df_leads.empty and "corretor" in df_leads.columns:
-        corretor_data = df_leads[df_leads["corretor"].notna() & (df_leads["corretor"] != "")]
-        if not corretor_data.empty:
-            ranking = corretor_data["corretor"].value_counts().head(10).reset_index()
-            ranking.columns = ["Corretor", "Leads"]
-            max_leads = ranking["Leads"].max()
+        if not df_leads.empty and "corretor" in df_leads.columns:
+            corretor_data = df_leads[df_leads["corretor"].notna() & (df_leads["corretor"] != "")]
+            if not corretor_data.empty:
+                ranking = corretor_data["corretor"].value_counts().head(10).reset_index()
+                ranking.columns = ["Corretor", "Leads"]
+                max_leads = ranking["Leads"].max()
 
-            html_ranking = ""
-            for i, row in ranking.iterrows():
-                pos = i + 1
-                rank_class = f"rank-{pos}" if pos <= 3 else "rank-other"
-                pct = row["Leads"] / max_leads * 100
-                html_ranking += f"""
-                <div class="ranking-item">
-                    <div class="rank-num {rank_class}">{pos}°</div>
-                    <div style="flex:1">
-                        <div class="rank-name">{escape(row['Corretor'])}</div>
-                        <div style="height:8px;background:#EAF3FB;border-radius:4px;overflow:hidden;margin-top:4px">
-                            <div style="width:{pct:.0f}%;height:100%;background:{'#F0A500' if pos == 1 else '#1C3882' if pos <= 3 else '#9CA3AF'};border-radius:4px"></div>
+                html_ranking = ""
+                for i, row in ranking.iterrows():
+                    pos = i + 1
+                    rank_class = f"rank-{pos}" if pos <= 3 else "rank-other"
+                    pct = row["Leads"] / max_leads * 100
+                    html_ranking += f"""
+                    <div class="ranking-item">
+                        <div class="rank-num {rank_class}">{pos}°</div>
+                        <div style="flex:1">
+                            <div class="rank-name">{escape(row['Corretor'])}</div>
+                            <div style="height:8px;background:#EAF3FB;border-radius:4px;overflow:hidden;margin-top:4px">
+                                <div style="width:{pct:.0f}%;height:100%;background:{'#F0A500' if pos == 1 else '#1C3882' if pos <= 3 else '#9CA3AF'};border-radius:4px"></div>
+                            </div>
                         </div>
+                        <div class="rank-value">{row['Leads']:,} leads</div>
                     </div>
-                    <div class="rank-value">{row['Leads']:,} leads</div>
-                </div>
-                """
-            st.markdown(html_ranking, unsafe_allow_html=True)
+                    """
+                st.markdown(html_ranking, unsafe_allow_html=True)
+            else:
+                st.info("Nenhum lead com corretor atribuido.")
         else:
-            st.info("Nenhum lead com corretor atribuido.")
-    else:
-        st.info("Sem dados de corretores.")
+            st.info("Sem dados de corretores.")
 
     # Recent leads (PII reduzida)
     st.markdown("""

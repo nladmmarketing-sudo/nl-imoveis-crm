@@ -5,11 +5,20 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from utils.supabase_client import fetch_leads_jetimob, fetch_vendas
-from utils.auth import escape
+from utils.auth import escape, filtrar_por_perfil, get_usuario_atual, is_corretor
 from utils.filtros import aplicar_filtro
 
 
 def render():
+    # Guard de sessao + mapeamento (defesa em profundidade — app.py ja checa autenticacao)
+    user = get_usuario_atual()
+    if not user:
+        st.warning("Sessao expirada. Faca login novamente.")
+        st.stop()
+    if is_corretor() and not (user.get("corretor_nome_jetimob") or "").strip():
+        st.error("Seu cadastro nao tem 'nome no Jetimob' configurado. Contate o admin.")
+        st.stop()
+
     periodo = st.session_state.get("periodo_global", "Ultimos 30 dias")
 
     st.markdown(f"""
@@ -20,8 +29,9 @@ def render():
     </div>
     """, unsafe_allow_html=True)
 
-    df_vendas_all = fetch_vendas()
-    df_leads_all = fetch_leads_jetimob()
+    # Filtra por perfil ANTES de qualquer agregacao (corretor so ve os proprios)
+    df_vendas_all = filtrar_por_perfil(fetch_vendas(), "corretor")
+    df_leads_all = filtrar_por_perfil(fetch_leads_jetimob(), "corretor")
 
     # Aplica filtro de periodo
     df_vendas = aplicar_filtro(df_vendas_all, periodo, "data_venda")

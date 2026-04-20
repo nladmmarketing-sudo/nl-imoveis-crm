@@ -1,11 +1,18 @@
 """
 Gerenciar Usuarios - Cadastro e controle de acesso (apenas admin)
+
+IMPORTANTE - ROLLOUT pos-migration:
+Apos rodar sql/add_corretor_mapping.sql, todos os corretores existentes terao
+corretor_nome_jetimob = NULL. Eles nao conseguirao usar Visao Geral, Equipe Vendas
+ou Equipe Locacao ate que o admin preencha o campo via popover "Editar nome Jetimob"
+abaixo. Antes de deploy em producao: liste corretores sem mapeamento e preencha um
+a um com o nome EXATO como aparece no Jetimob.
 """
 import streamlit as st
 from utils.auth import (
     is_admin, cadastrar_usuario, listar_usuarios,
     atualizar_status_usuario, get_usuario_atual,
-    resetar_senha_por_gerente, escape
+    resetar_senha_por_gerente, atualizar_corretor_jetimob, escape
 )
 from utils.auditoria import registrar
 from utils.supabase_client import get_supabase_client
@@ -49,19 +56,24 @@ def render():
         with col1:
             nome = st.text_input("Nome completo", placeholder="Ex: Maria Silva")
             email = st.text_input("Email", placeholder="email@nlimoveis.com.br")
+            corretor_jt = st.text_input(
+                "Nome exato no Jetimob",
+                placeholder="Ex: Maria Silva Santos",
+                help="Obrigatorio se perfil = corretor. Deve ser o nome IDENTICO ao que aparece na coluna 'corretor' do Jetimob (case-insensitive, ignora acentos)."
+            )
         with col2:
             senha = st.text_input("Senha inicial", type="password",
                                    help="Minimo 8 caracteres, com letras e numeros")
             perfil = st.selectbox(
                 "Perfil de acesso",
-                ["gerente", "corretor", "admin"],
-                help="Admin: altera tudo · Gerente: ve tudo, nao altera · Corretor: acesso limitado"
+                ["gerente", "corretor", "marketing", "admin"],
+                help="Admin: tudo · Gerente/Marketing: ve tudo · Corretor: so os proprios dados"
             )
 
         submit = st.form_submit_button("Cadastrar Usuario", use_container_width=True)
 
         if submit:
-            ok, msg = cadastrar_usuario(nome, email, senha, perfil)
+            ok, msg = cadastrar_usuario(nome, email, senha, perfil, corretor_jt)
             if ok:
                 registrar("cadastrou_usuario", f"{nome} ({email}) perfil={perfil}")
                 st.success(msg)
@@ -91,6 +103,7 @@ def render():
                 "admin": "badge-red",
                 "gerente": "badge-gold",
                 "corretor": "badge-blue",
+                "marketing": "badge-orange",
             }
             perfil_badge = perfil_badges.get(user["perfil"], "badge-blue")
             is_self = user_atual and user["id"] == user_atual["id"]
@@ -99,8 +112,12 @@ def render():
             perfil_safe = escape(user['perfil'].title())
             inicial = escape(user['nome'][0].upper()) if user.get('nome') else "?"
 
-            col1, col2, col3, col4 = st.columns([4, 1, 1, 1])
+            col1, col2, col3, col4, col5 = st.columns([4, 1, 1, 1, 1])
             with col1:
+                # Mostra warning se for corretor sem mapeamento Jetimob
+                aviso_jt = ""
+                if user["perfil"] == "corretor" and not user.get("corretor_nome_jetimob"):
+                    aviso_jt = '<span class="kpi-badge badge-red" title="Sem nome Jetimob">⚠</span>'
                 st.markdown(f"""
                 <div style="display:flex;align-items:center;gap:1rem;padding:0.6rem 1rem;background:white;border-radius:10px;border:1px solid #D1E4F5;margin:0.3rem 0">
                     <div style="width:36px;height:36px;background:#EAF3FB;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;color:#1C3882;font-size:0.85rem">{inicial}</div>
@@ -108,6 +125,7 @@ def render():
                         <div style="font-weight:700;color:#1C3882;font-size:0.88rem">{nome_safe}{" (voce)" if is_self else ""}</div>
                         <div style="font-size:0.75rem;color:#6B7280">{email_safe}</div>
                     </div>
+                    {aviso_jt}
                     <span class="kpi-badge {perfil_badge}">{perfil_safe}</span>
                     <span class="kpi-badge {badge_cls}">{status_text}</span>
                 </div>
@@ -142,7 +160,7 @@ def render():
                 if not is_self:
                     with st.popover("Alterar perfil"):
                         st.caption(f"Perfil atual: {user['perfil']}")
-                        perfis = ["gerente", "corretor", "admin"]
+                        perfis = ["gerente", "corretor", "marketing", "admin"]
                         idx = perfis.index(user["perfil"]) if user["perfil"] in perfis else 0
                         novo = st.selectbox("Novo perfil", perfis, index=idx, key=f"perf_{user['id']}")
                         if st.button("Salvar perfil", key=f"perfb_{user['id']}"):
@@ -152,16 +170,41 @@ def render():
                                 st.rerun()
                             else:
                                 st.error("Erro ao alterar perfil.")
+            with col5:
+                if not is_self:
+                    with st.popover("Editar nome Jetimob"):
+                        atual_jt = user.get("corretor_nome_jetimob") or ""
+                        st.caption(f"Atual: {atual_jt or '(nao definido)'}")
+                        novo_jt = st.text_input(
+                            "Nome exato no Jetimob",
+                            value=atual_jt,
+                            key=f"jt_{user['id']}",
+                            help="Como aparece na coluna 'corretor' do Jetimob. Match ignora case e acentos."
+                        )
+                        if st.button("Salvar nome Jetimob", key=f"jtb_{user['id']}"):
+                            if atualizar_corretor_jetimob(user["id"], novo_jt):
+                                registrar("alterou_nome_jetimob", f"{user['nome']}: '{atual_jt}' -> '{novo_jt}'")
+                                st.success("Nome Jetimob atualizado.")
+                                st.rerun()
+                            else:
+                                st.error("Erro ao atualizar nome Jetimob.")
 
         # Resumo
         admins = len([u for u in usuarios if u["perfil"] == "admin"])
         gerentes = len([u for u in usuarios if u["perfil"] == "gerente"])
         corretores = len([u for u in usuarios if u["perfil"] == "corretor"])
+        marketing = len([u for u in usuarios if u["perfil"] == "marketing"])
         ativos = len([u for u in usuarios if u["ativo"]])
+        sem_jt = len([u for u in usuarios if u["perfil"] == "corretor" and not u.get("corretor_nome_jetimob")])
+
+        aviso_sem_jt = (
+            f' · <span style="color:#DC2626;font-weight:700">⚠ {sem_jt} corretor(es) sem nome Jetimob</span>'
+            if sem_jt > 0 else ""
+        )
 
         st.markdown(f"""
         <div style="margin-top:1rem;padding:0.8rem 1.2rem;background:#EAF3FB;border-radius:10px;font-size:0.82rem;color:#1C3882">
-            <strong>{ativos} ativos</strong> de {len(usuarios)} · {admins} admin(s) · {gerentes} gerente(s) · {corretores} corretor(es)
+            <strong>{ativos} ativos</strong> de {len(usuarios)} · {admins} admin(s) · {gerentes} gerente(s) · {marketing} marketing · {corretores} corretor(es){aviso_sem_jt}
         </div>
         """, unsafe_allow_html=True)
     else:
