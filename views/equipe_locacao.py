@@ -101,8 +101,8 @@ def render():
                 <div style="flex:1">
                     <div class="rank-name">{escape(row['corretor'])}</div>
                     <div class="rank-sub">{row['locacoes']} locacao(es)</div>
-                    <div style="height:8px;background:#EAF3FB;border-radius:4px;overflow:hidden;margin-top:4px">
-                        <div style="width:{pct:.0f}%;height:100%;background:{'#F0A500' if i == 1 else '#1C3882'};border-radius:4px"></div>
+                    <div style="height:8px;background:#F3F6FA;border-radius:4px;overflow:hidden;margin-top:4px">
+                        <div style="width:{pct:.0f}%;height:100%;background:{'#FFB700' if i == 1 else '#033677'};border-radius:4px"></div>
                     </div>
                 </div>
                 <div class="rank-value">R${row['receita']:,.0f}</div>
@@ -162,7 +162,7 @@ def render():
             if not bairro_data.empty:
                 bc = bairro_data["bairro"].value_counts().head(10).reset_index()
                 bc.columns = ["Bairro", "Locacoes"]
-                fig = px.bar(bc, x="Locacoes", y="Bairro", orientation="h", color_discrete_sequence=["#1C3882"])
+                fig = px.bar(bc, x="Locacoes", y="Bairro", orientation="h", color_discrete_sequence=["#033677"])
                 fig.update_layout(height=350, margin=dict(l=0,r=0,t=10,b=0), yaxis=dict(autorange="reversed"),
                                   plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
                 st.plotly_chart(fig, use_container_width=True)
@@ -176,7 +176,7 @@ def render():
                 oc = orig_data["origem_lead"].value_counts().reset_index()
                 oc.columns = ["Origem", "Locacoes"]
                 fig2 = px.pie(oc, values="Locacoes", names="Origem", hole=0.4,
-                              color_discrete_sequence=["#1C3882", "#F0A500", "#2a4fa8", "#FFD166", "#16A34A"])
+                              color_discrete_sequence=["#033677", "#FFB700", "#2678BC", "#FFDE76", "#16A34A"])
                 fig2.update_layout(height=350, margin=dict(l=0,r=0,t=10,b=0))
                 st.plotly_chart(fig2, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)

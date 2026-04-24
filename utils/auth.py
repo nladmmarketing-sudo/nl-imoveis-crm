@@ -3,10 +3,12 @@ Sistema de Autenticacao - NL Imoveis CRM
 Login com bcrypt, rate limiting, timeout de sessao e controle de perfis.
 """
 from __future__ import annotations  # compatibilidade Python 3.9 com type hints X | None
+import base64
 import re
 import time
 import html
 import unicodedata
+from pathlib import Path
 import streamlit as st
 import bcrypt
 import pandas as pd
@@ -383,6 +385,13 @@ def logout():
 
 # ---------- RENDER ----------
 
+@st.cache_data(show_spinner=False)
+def _logo_login_data_url() -> str:
+    path = Path(__file__).resolve().parent.parent / "assets" / "brand" / "logo" / "nl-logo-principal.png"
+    data = base64.b64encode(path.read_bytes()).decode("ascii")
+    return f"data:image/png;base64,{data}"
+
+
 def render_login():
     """Renderiza pagina de login"""
     st.markdown("""
@@ -392,11 +401,14 @@ def render_login():
     </style>
     """, unsafe_allow_html=True)
 
-    st.markdown("""
+    logo_url = _logo_login_data_url()
+    st.markdown(f"""
     <div style="text-align:center;margin-bottom:2rem">
-        <div style="background:linear-gradient(135deg,#1C3882,#0f1f4f);padding:2rem;border-radius:16px;margin-bottom:1.5rem">
-            <h1 style="color:white;margin:0;font-size:1.8rem;font-weight:800">NL IMOVEIS</h1>
-            <p style="color:#F0A500;margin:0.3rem 0 0;font-size:0.85rem;font-weight:600">PAINEL ESTRATEGICO</p>
+        <div style="background:linear-gradient(135deg,#033677,#001833);padding:2.2rem 2rem 1.8rem;border-radius:16px;margin-bottom:1.5rem">
+            <img src="{logo_url}" alt="NL Imoveis"
+                 style="max-width:220px;width:70%;height:auto;
+                        filter:brightness(0) invert(1);margin-bottom:0.8rem">
+            <p style="color:#FFB700;margin:0.3rem 0 0;font-size:0.8rem;font-weight:600;letter-spacing:1.5px">PAINEL ESTRATEGICO</p>
             <p style="color:rgba(255,255,255,0.5);margin:0.2rem 0 0;font-size:0.72rem">CRECI 1440 J · Natal/RN</p>
         </div>
     </div>

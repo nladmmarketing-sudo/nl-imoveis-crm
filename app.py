@@ -2,7 +2,11 @@
 Painel Estrategico - NL Imoveis
 Dashboard gerencial para acompanhamento de vendas, locacao e performance
 """
+import base64
+from pathlib import Path
+
 import streamlit as st
+from PIL import Image
 from utils.auth import (
     usuario_logado, render_login, get_usuario_atual,
     is_admin, is_gerente, logout, escape
@@ -10,42 +14,108 @@ from utils.auth import (
 from utils.supabase_client import limpar_cache
 from utils.filtros import seletor_periodo
 
+_LOGO_PATH = Path(__file__).parent / "assets" / "brand" / "logo" / "nl-logo-principal.png"
+
 st.set_page_config(
     page_title="NL Imoveis - Painel Estrategico",
-    page_icon="🏠",
+    page_icon=Image.open(_LOGO_PATH),
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+
+@st.cache_data(show_spinner=False)
+def _font_data_url(filename: str, mime: str) -> str:
+    path = Path(__file__).parent / "assets" / "brand" / "fonts" / filename
+    data = base64.b64encode(path.read_bytes()).decode("ascii")
+    return f"data:{mime};base64,{data}"
+
+
+_FONT_GEORAMA_REGULAR = _font_data_url("Georama-Regular.ttf", "font/ttf")
+_FONT_GEORAMA_MEDIUM = _font_data_url("Georama-Medium.woff2", "font/woff2")
+_FONT_MULTA_PECUNIA = _font_data_url("MultaPecunia.woff2", "font/woff2")
+
+
+@st.cache_data(show_spinner=False)
+def _logo_data_url(filename: str) -> str:
+    path = Path(__file__).parent / "assets" / "brand" / "logo" / filename
+    data = base64.b64encode(path.read_bytes()).decode("ascii")
+    return f"data:image/png;base64,{data}"
+
+
+_LOGO_PRINCIPAL_URL = _logo_data_url("nl-logo-principal.png")
 
 # ---- Verificar autenticacao ANTES de tudo ----
 if not usuario_logado():
     render_login()
     st.stop()
 
-# CSS NL Imoveis - Azul/Dourado
-st.markdown("""
+# CSS NL Imoveis - paleta oficial (Manual da Marca 28/01/2025)
+st.markdown(f"""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+    @font-face {{
+        font-family: 'Georama';
+        src: url('{_FONT_GEORAMA_REGULAR}') format('truetype');
+        font-weight: 400;
+        font-style: normal;
+        font-display: swap;
+    }}
+    @font-face {{
+        font-family: 'Georama';
+        src: url('{_FONT_GEORAMA_MEDIUM}') format('woff2');
+        font-weight: 500 800;
+        font-style: normal;
+        font-display: swap;
+    }}
+    @font-face {{
+        font-family: 'MultaPecunia';
+        src: url('{_FONT_MULTA_PECUNIA}') format('woff2');
+        font-weight: 400;
+        font-style: normal;
+        font-display: swap;
+    }}
 
-    :root {
-        --azul: #1C3882;
-        --azul-light: #2a4fa8;
-        --dourado: #F0A500;
-        --dourado-light: #FFD166;
-        --bg: #EAF3FB;
+    :root {{
+        /* Paleta oficial NL Imoveis */
+        --nl-azul-noturno: #033677;
+        --nl-ouro-vivo: #FFB700;
+        --nl-ceu-claro: #F3F6FA;
+        --nl-sol-dourado: #FFDE76;
+        --nl-azul-horizonte: #2678BC;
+        --nl-azul-profundo: #001833;
+        --nl-terra-fertil: #9B5400;
+
+        /* Aliases compativeis com o CSS existente */
+        --azul: var(--nl-azul-noturno);
+        --azul-light: var(--nl-azul-horizonte);
+        --dourado: var(--nl-ouro-vivo);
+        --dourado-light: var(--nl-sol-dourado);
+        --bg: var(--nl-ceu-claro);
         --green: #16A34A;
         --red: #DC2626;
         --orange: #EA580C;
         --gray: #6B7280;
         --border: #D1E4F5;
-    }
+    }}
 
-    .main .block-container { padding-top: 1rem; max-width: 1200px; }
-    html, body, [class*="css"] { font-family: 'Inter', 'Segoe UI', sans-serif; }
+    .main .block-container {{ padding-top: 1rem; max-width: 1200px; }}
+    html, body, [class*="css"], [class*="st-"],
+    .stMarkdown, .stText, button, input, textarea, select {{
+        font-family: 'Georama', -apple-system, 'Segoe UI', sans-serif;
+    }}
+    h1, h2, h3, h4, h5, h6 {{
+        font-family: 'Georama', -apple-system, 'Segoe UI', sans-serif;
+        font-weight: 700;
+    }}
+</style>
+""", unsafe_allow_html=True)
 
+# CSS de componentes (string normal, mantem o layout original)
+st.markdown("""
+<style>
     /* Header */
     .nl-header {
-        background: linear-gradient(135deg, #1C3882 0%, #162d6e 60%, #0f1f4f 100%);
+        background: linear-gradient(135deg, #033677 0%, #022757 60%, #001833 100%);
         padding: 2rem 2.5rem;
         border-radius: 16px;
         margin-bottom: 1.5rem;
@@ -117,11 +187,11 @@ st.markdown("""
         font-weight: 700;
         margin-top: 0.4rem;
     }
-    .badge-red { background: #FEE2E2; color: #DC2626; }
-    .badge-green { background: #DCFCE7; color: #16A34A; }
-    .badge-orange { background: #FFEDD5; color: #EA580C; }
-    .badge-blue { background: #DBEAFE; color: #1D4ED8; }
-    .badge-gold { background: #FEF3C7; color: #92400E; }
+    .badge-red { background: #FEE2E2; color: #DC2626; }         /* semantico erro */
+    .badge-green { background: #DCFCE7; color: #16A34A; }       /* semantico sucesso */
+    .badge-orange { background: #FFE4C7; color: #9B5400; }      /* Terra Fertil */
+    .badge-blue { background: #DBEAFE; color: #033677; }        /* Azul Noturno */
+    .badge-gold { background: #FFDE76; color: #9B5400; }        /* Sol Dourado + Terra Fertil */
 
     /* Section headers */
     .section-hdr {
@@ -193,10 +263,10 @@ st.markdown("""
         margin: 0.75rem 0;
     }
     .alert-red { background: #FEE2E2; border-left: 4px solid #DC2626; }
-    .alert-orange { background: #FFEDD5; border-left: 4px solid #EA580C; }
+    .alert-orange { background: #FFE4C7; border-left: 4px solid #9B5400; }   /* Terra Fertil */
     .alert-green { background: #DCFCE7; border-left: 4px solid #16A34A; }
-    .alert-blue { background: #DBEAFE; border-left: 4px solid #2563EB; }
-    .alert-gold { background: #FEF3C7; border-left: 4px solid #F0A500; }
+    .alert-blue { background: #DBEAFE; border-left: 4px solid #033677; }     /* Azul Noturno */
+    .alert-gold { background: #FFDE76; border-left: 4px solid #FFB700; }     /* Sol Dourado + Ouro Vivo */
 
     /* Chart box */
     .chart-box {
@@ -221,7 +291,10 @@ st.markdown("""
     .nl-footer strong { color: var(--dourado); }
 
     /* Sidebar */
-    [data-testid="stSidebar"] { background: linear-gradient(180deg, #1C3882 0%, #0f1f4f 100%); }
+    [data-testid="stSidebar"] {
+        background: var(--nl-azul-noturno);
+        border-right: 3px solid var(--nl-ouro-vivo);
+    }
     [data-testid="stSidebar"] * { color: white !important; }
     [data-testid="stSidebar"] hr { border-color: rgba(255,255,255,0.15); }
 
@@ -232,6 +305,47 @@ st.markdown("""
 
     /* Esconde apenas o menu automatico (seguro, nao afeta outros elementos) */
     [data-testid="stSidebarNav"] { display: none !important; }
+
+    /* Botoes - padrao NL */
+    .stButton > button[kind="primary"] {
+        background-color: var(--nl-ouro-vivo) !important;
+        color: var(--nl-azul-noturno) !important;
+        border: none !important;
+        font-weight: 700 !important;
+        letter-spacing: 0.3px;
+    }
+    .stButton > button[kind="primary"]:hover {
+        background-color: var(--nl-sol-dourado) !important;
+        color: var(--nl-azul-noturno) !important;
+        border: none !important;
+    }
+    .stButton > button[kind="secondary"] {
+        background-color: transparent !important;
+        color: var(--nl-azul-noturno) !important;
+        border: 1.5px solid var(--nl-azul-noturno) !important;
+        font-weight: 600 !important;
+    }
+    .stButton > button[kind="secondary"]:hover {
+        background-color: var(--nl-ceu-claro) !important;
+        color: var(--nl-azul-noturno) !important;
+        border-color: var(--nl-azul-noturno) !important;
+    }
+
+    /* Override: sidebar escura — primario mantem texto azul, secundario fica outline branco */
+    [data-testid="stSidebar"] .stButton > button[kind="primary"] {
+        color: var(--nl-azul-noturno) !important;
+    }
+    [data-testid="stSidebar"] .stButton > button[kind="secondary"] {
+        color: white !important;
+        border-color: rgba(255,255,255,0.4) !important;
+    }
+    [data-testid="stSidebar"] .stButton > button[kind="secondary"]:hover {
+        background-color: rgba(255,255,255,0.08) !important;
+        color: white !important;
+    }
+
+    /* KPI: numero destacavel em Ouro Vivo (opt-in com .highlight) */
+    .kpi-card .num.highlight { color: var(--nl-ouro-vivo); }
 
     @media(max-width: 768px) {
         .kpi-grid { grid-template-columns: repeat(2, 1fr); }
@@ -245,8 +359,21 @@ def main():
     user = get_usuario_atual()
 
     with st.sidebar:
-        st.markdown("### NL IMOVEIS")
-        st.markdown("*CRECI 1440 J · Natal/RN*")
+        st.markdown(
+            f"""
+            <div style="text-align:center;padding:0.4rem 0 0.6rem 0">
+                <img src="{_LOGO_PRINCIPAL_URL}" alt="NL Imoveis"
+                     style="max-width:140px;width:80%;height:auto;
+                            filter:brightness(0) invert(1);opacity:0.95">
+                <div style="font-family:'MultaPecunia','Georama',sans-serif;
+                            font-size:0.72rem;color:rgba(255,255,255,0.7);
+                            margin-top:0.5rem;letter-spacing:0.8px">
+                    CRECI 1440 J · Natal/RN
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
         st.markdown("---")
 
         # Info do usuario logado
@@ -266,7 +393,7 @@ def main():
         st.markdown("---")
 
         # Menu de navegacao
-        paginas = ["Visao Geral", "Equipe Vendas", "Equipe Locacao", "Origens de Leads", "Metas & Projecoes", "Minha Conta"]
+        paginas = ["Visao Geral", "Vendas do Mes (Jetimob)", "Equipe Vendas", "Cadastrar Venda", "Equipe Locacao", "Origens de Leads", "Metas & Projecoes", "Minha Conta"]
         if is_admin():
             paginas.insert(-1, "Gerenciar Usuarios")
             paginas.insert(-1, "Auditoria")
@@ -294,9 +421,15 @@ def main():
     if pagina == "Visao Geral":
         from views import visao_geral
         visao_geral.render()
+    elif pagina == "Vendas do Mes (Jetimob)":
+        from views import vendas_jetimob
+        vendas_jetimob.render()
     elif pagina == "Equipe Vendas":
         from views import equipe_vendas
         equipe_vendas.render()
+    elif pagina == "Cadastrar Venda":
+        from views import cadastrar_venda
+        cadastrar_venda.render()
     elif pagina == "Equipe Locacao":
         from views import equipe_locacao
         equipe_locacao.render()

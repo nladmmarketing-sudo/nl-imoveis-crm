@@ -18,6 +18,26 @@ from utils.auditoria import registrar
 from utils.supabase_client import get_supabase_client
 
 
+# Estilos inline para badges — compatibilidade com Streamlit 1.50+
+# (classes CSS customizadas sao as vezes escapadas dentro de st.columns)
+_BADGE_BASE = (
+    "display:inline-block;padding:0.2rem 0.6rem;border-radius:50px;"
+    "font-size:0.68rem;font-weight:700;margin-top:0.4rem;"
+)
+_BADGE_COLORS = {
+    # Semanticos universais (mantidos)
+    "badge-red":    "background:#FEE2E2;color:#DC2626",
+    "badge-green":  "background:#DCFCE7;color:#16A34A",
+    # Paleta NL (Manual da Marca 28/01/2025)
+    "badge-orange": "background:#FFE4C7;color:#9B5400",  # Terra Fertil
+    "badge-blue":   "background:#DBEAFE;color:#033677",  # Azul Noturno
+    "badge-gold":   "background:#FFDE76;color:#9B5400",  # Sol Dourado + Terra Fertil
+}
+
+def _badge_style(cls: str) -> str:
+    return _BADGE_BASE + _BADGE_COLORS.get(cls, _BADGE_COLORS["badge-blue"])
+
+
 def alterar_perfil(user_id: int, novo_perfil: str) -> bool:
     client = get_supabase_client()
     try:
@@ -117,17 +137,17 @@ def render():
                 # Mostra warning se for corretor sem mapeamento Jetimob
                 aviso_jt = ""
                 if user["perfil"] == "corretor" and not user.get("corretor_nome_jetimob"):
-                    aviso_jt = '<span class="kpi-badge badge-red" title="Sem nome Jetimob">⚠</span>'
+                    aviso_jt = f'<span style="{_badge_style("badge-red")}" title="Sem nome Jetimob">⚠</span>'
                 st.markdown(f"""
                 <div style="display:flex;align-items:center;gap:1rem;padding:0.6rem 1rem;background:white;border-radius:10px;border:1px solid #D1E4F5;margin:0.3rem 0">
-                    <div style="width:36px;height:36px;background:#EAF3FB;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;color:#1C3882;font-size:0.85rem">{inicial}</div>
+                    <div style="width:36px;height:36px;background:#F3F6FA;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;color:#033677;font-size:0.85rem">{inicial}</div>
                     <div style="flex:1">
-                        <div style="font-weight:700;color:#1C3882;font-size:0.88rem">{nome_safe}{" (voce)" if is_self else ""}</div>
+                        <div style="font-weight:700;color:#033677;font-size:0.88rem">{nome_safe}{" (voce)" if is_self else ""}</div>
                         <div style="font-size:0.75rem;color:#6B7280">{email_safe}</div>
                     </div>
                     {aviso_jt}
-                    <span class="kpi-badge {perfil_badge}">{perfil_safe}</span>
-                    <span class="kpi-badge {badge_cls}">{status_text}</span>
+                    <span style="{_badge_style(perfil_badge)}">{perfil_safe}</span>
+                    <span style="{_badge_style(badge_cls)}">{status_text}</span>
                 </div>
                 """, unsafe_allow_html=True)
             with col2:
@@ -203,7 +223,7 @@ def render():
         )
 
         st.markdown(f"""
-        <div style="margin-top:1rem;padding:0.8rem 1.2rem;background:#EAF3FB;border-radius:10px;font-size:0.82rem;color:#1C3882">
+        <div style="margin-top:1rem;padding:0.8rem 1.2rem;background:#F3F6FA;border-radius:10px;font-size:0.82rem;color:#033677">
             <strong>{ativos} ativos</strong> de {len(usuarios)} · {admins} admin(s) · {gerentes} gerente(s) · {marketing} marketing · {corretores} corretor(es){aviso_sem_jt}
         </div>
         """, unsafe_allow_html=True)

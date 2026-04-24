@@ -146,7 +146,7 @@ def render():
 
     def status_color(pct_val):
         if pct_val >= 80: return "#16A34A", "badge-green", "No ritmo"
-        if pct_val >= 50: return "#F0A500", "badge-gold", "Atencao"
+        if pct_val >= 50: return "#FFB700", "badge-gold", "Atencao"
         return "#DC2626", "badge-red", "Abaixo"
 
     metrics = [
@@ -160,9 +160,9 @@ def render():
         color, badge_cls, status_text = status_color(pct_val)
         st.markdown(f"""
         <div style="display:flex;align-items:center;gap:1rem;margin:0.6rem 0;padding:0.8rem 1.2rem;background:white;border-radius:12px;box-shadow:0 2px 8px rgba(28,56,130,0.06);border:1px solid #D1E4F5">
-            <div style="min-width:160px;font-size:0.88rem;font-weight:700;color:#1C3882">{label}</div>
+            <div style="min-width:160px;font-size:0.88rem;font-weight:700;color:#033677">{label}</div>
             <div style="min-width:120px;font-size:0.85rem;color:#1F2937"><strong>{real}</strong> / {meta}</div>
-            <div style="flex:1;height:14px;background:#EAF3FB;border-radius:7px;overflow:hidden">
+            <div style="flex:1;height:14px;background:#F3F6FA;border-radius:7px;overflow:hidden">
                 <div style="width:{pct_val:.0f}%;height:100%;background:{color};border-radius:7px;transition:width 0.5s"></div>
             </div>
             <div style="min-width:50px;text-align:right;font-size:0.85rem;font-weight:800;color:{color}">{pct_val:.0f}%</div>
@@ -183,13 +183,13 @@ def render():
             delta={"reference": meta_vgv, "valueformat": ",.0f", "prefix": "R$"},
             gauge={
                 "axis": {"range": [0, meta_vgv * 1.2]},
-                "bar": {"color": "#1C3882"},
+                "bar": {"color": "#033677"},
                 "steps": [
                     {"range": [0, meta_vgv * 0.5], "color": "#FEE2E2"},
-                    {"range": [meta_vgv * 0.5, meta_vgv * 0.8], "color": "#FEF3C7"},
+                    {"range": [meta_vgv * 0.5, meta_vgv * 0.8], "color": "#FFDE76"},
                     {"range": [meta_vgv * 0.8, meta_vgv], "color": "#DCFCE7"},
                 ],
-                "threshold": {"line": {"color": "#F0A500", "width": 4}, "thickness": 0.75, "value": meta_vgv}
+                "threshold": {"line": {"color": "#FFB700", "width": 4}, "thickness": 0.75, "value": meta_vgv}
             }
         ))
         fig.update_layout(height=280, margin=dict(l=20, r=20, t=40, b=20))
@@ -207,10 +207,10 @@ def render():
                 "bar": {"color": "#16A34A"},
                 "steps": [
                     {"range": [0, meta_vendas * 0.5], "color": "#FEE2E2"},
-                    {"range": [meta_vendas * 0.5, meta_vendas * 0.8], "color": "#FEF3C7"},
+                    {"range": [meta_vendas * 0.5, meta_vendas * 0.8], "color": "#FFDE76"},
                     {"range": [meta_vendas * 0.8, meta_vendas], "color": "#DCFCE7"},
                 ],
-                "threshold": {"line": {"color": "#F0A500", "width": 4}, "thickness": 0.75, "value": meta_vendas}
+                "threshold": {"line": {"color": "#FFB700", "width": 4}, "thickness": 0.75, "value": meta_vendas}
             }
         ))
         fig2.update_layout(height=280, margin=dict(l=20, r=20, t=40, b=20))

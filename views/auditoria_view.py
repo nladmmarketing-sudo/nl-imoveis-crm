@@ -118,7 +118,7 @@ def render():
     )
 
     st.markdown(f"""
-    <div style="margin-top:1rem;padding:0.8rem 1.2rem;background:#EAF3FB;border-radius:10px;font-size:0.82rem;color:#1C3882">
+    <div style="margin-top:1rem;padding:0.8rem 1.2rem;background:#F3F6FA;border-radius:10px;font-size:0.82rem;color:#033677">
         <strong>{len(df_display)} registro(s)</strong> exibido(s) de {len(df)} total
     </div>
     """, unsafe_allow_html=True)

@@ -45,7 +45,7 @@ def render():
         </div>
         <div class="kpi-card {'red' if total > 0 and sem_origem/total > 0.3 else ''}">
             <div class="label">Sem Origem</div>
-            <div class="num" style="color:{'#DC2626' if total > 0 and sem_origem/total > 0.3 else '#1C3882'}">{sem_origem:,}</div>
+            <div class="num" style="color:{'#DC2626' if total > 0 and sem_origem/total > 0.3 else '#033677'}">{sem_origem:,}</div>
             <div class="sub">{sem_origem/total*100:.1f}% sem rastreamento</div>
             {'<span class="kpi-badge badge-red">Rastreamento precisa melhorar</span>' if total > 0 and sem_origem/total > 0.3 else ''}
         </div>
@@ -67,7 +67,7 @@ def render():
             oc = df_origem["origem"].value_counts().head(12).reset_index()
             oc.columns = ["Origem", "Leads"]
             fig = px.pie(oc, values="Leads", names="Origem", hole=0.4,
-                         color_discrete_sequence=["#1C3882", "#F0A500", "#2a4fa8", "#FFD166",
+                         color_discrete_sequence=["#033677", "#FFB700", "#2678BC", "#FFDE76",
                                                   "#16A34A", "#DC2626", "#EA580C", "#8B5CF6",
                                                   "#06B6D4", "#D1E4F5", "#9CA3AF", "#CD7F32"])
             fig.update_layout(height=400, margin=dict(l=0, r=0, t=10, b=0))
@@ -82,7 +82,7 @@ def render():
             oc2["pct"] = (oc2["Leads"] / total * 100).round(1)
             fig2 = px.bar(oc2, x="Leads", y="Origem", orientation="h",
                           text=oc2.apply(lambda r: f"{r['Leads']:,} ({r['pct']}%)", axis=1),
-                          color_discrete_sequence=["#1C3882"])
+                          color_discrete_sequence=["#033677"])
             fig2.update_layout(
                 height=400, margin=dict(l=0, r=0, t=10, b=0),
                 yaxis=dict(autorange="reversed"),
@@ -136,7 +136,7 @@ def render():
         if not df_top5.empty:
             monthly = df_top5.groupby(["mes", "origem"]).size().reset_index(name="Leads")
             fig3 = px.line(monthly, x="mes", y="Leads", color="origem",
-                           color_discrete_sequence=["#1C3882", "#F0A500", "#16A34A", "#DC2626", "#8B5CF6"])
+                           color_discrete_sequence=["#033677", "#FFB700", "#16A34A", "#DC2626", "#8B5CF6"])
             fig3.update_layout(
                 height=350, margin=dict(l=0, r=0, t=10, b=0),
                 xaxis_title="", yaxis_title="Leads",

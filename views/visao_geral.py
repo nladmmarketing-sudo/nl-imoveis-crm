@@ -85,7 +85,7 @@ def render():
             df_leads_copy["data"] = pd.to_datetime(df_leads_copy["created_at"], errors="coerce").dt.date
             timeline = df_leads_copy.dropna(subset=["data"]).groupby("data").size().reset_index(name="Leads")
             if not timeline.empty:
-                fig = px.area(timeline, x="data", y="Leads", color_discrete_sequence=["#1C3882"])
+                fig = px.area(timeline, x="data", y="Leads", color_discrete_sequence=["#033677"])
                 fig.update_layout(
                     height=320, margin=dict(l=0, r=0, t=10, b=0),
                     plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
@@ -105,7 +105,7 @@ def render():
             if not origem_data.empty:
                 oc = origem_data["origem"].value_counts().head(10).reset_index()
                 oc.columns = ["Origem", "Leads"]
-                fig2 = px.bar(oc, x="Leads", y="Origem", orientation="h", color_discrete_sequence=["#F0A500"])
+                fig2 = px.bar(oc, x="Leads", y="Origem", orientation="h", color_discrete_sequence=["#FFB700"])
                 fig2.update_layout(
                     height=320, margin=dict(l=0, r=0, t=10, b=0),
                     yaxis=dict(autorange="reversed"),
@@ -147,8 +147,8 @@ def render():
                         <div class="rank-num {rank_class}">{pos}°</div>
                         <div style="flex:1">
                             <div class="rank-name">{escape(row['Corretor'])}</div>
-                            <div style="height:8px;background:#EAF3FB;border-radius:4px;overflow:hidden;margin-top:4px">
-                                <div style="width:{pct:.0f}%;height:100%;background:{'#F0A500' if pos == 1 else '#1C3882' if pos <= 3 else '#9CA3AF'};border-radius:4px"></div>
+                            <div style="height:8px;background:#F3F6FA;border-radius:4px;overflow:hidden;margin-top:4px">
+                                <div style="width:{pct:.0f}%;height:100%;background:{'#FFB700' if pos == 1 else '#033677' if pos <= 3 else '#9CA3AF'};border-radius:4px"></div>
                             </div>
                         </div>
                         <div class="rank-value">{row['Leads']:,} leads</div>

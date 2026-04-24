@@ -7,3 +7,6 @@ venv/
 criar_admin.py
 migrar_leads.py
 *.local.py
+
+# Secrets embutidos (importar no n8n e apagar depois)
+n8n-workflow-*-READY.json
