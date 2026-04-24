@@ -114,6 +114,38 @@ def flatten_opportunities(raw: dict, contrato: str, brokers: dict[int, str],
     return rows
 
 
+def enrich_ganha_em(page: Page, rows: list[dict]) -> None:
+    """
+    Para cada oportunidade ganha, busca `opportunity.updated_at` do Jetimob
+    e grava como `ganha_em` (data em que foi marcada como ganha).
+
+    O endpoint /api/oportunidades/kanban não retorna esse campo, então
+    precisamos chamar /api/oportunidades/{id} para cada uma.
+    """
+    ids = [r["jetimob_id"] for r in rows]
+    if not ids:
+        return
+
+    # Busca todas em paralelo via Promise.all no browser
+    updated_map = page.evaluate(
+        """async (ids) => {
+            const results = await Promise.all(ids.map(async id => {
+                try {
+                    const r = await fetch('/api/oportunidades/' + id, { credentials: 'include' });
+                    const j = await r.json();
+                    return [id, j.data?.opportunity?.updated_at || null];
+                } catch (e) {
+                    return [id, null];
+                }
+            }));
+            return Object.fromEntries(results);
+        }""",
+        ids,
+    )
+    for r in rows:
+        r["ganha_em"] = updated_map.get(str(r["jetimob_id"])) or updated_map.get(r["jetimob_id"])
+
+
 def upsert_supabase(rows: list[dict], supa_url: str, supa_key: str) -> int:
     """Upsert por jetimob_id. Retorna quantidade afetada."""
     if not rows:
@@ -171,6 +203,11 @@ def main() -> None:
             print(f"[ok] {contrato:<10} → {len(rows):>3} ganhas "
                   f"(total kanban: {raw.get('total_items')})")
             all_rows.extend(rows)
+
+        # Enriquece com opportunity.updated_at (data real do ganho)
+        enrich_ganha_em(page, all_rows)
+        ganhas_com_data = sum(1 for r in all_rows if r.get("ganha_em"))
+        print(f"[ok] ganha_em preenchido para {ganhas_com_data}/{len(all_rows)}")
 
         ctx.close()
 

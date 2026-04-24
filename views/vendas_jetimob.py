@@ -1,6 +1,13 @@
 """
-Vendas Jetimob - Oportunidades ganhas puxadas direto do Jetimob.
-Mostra VGV, locações e ranking do mês vigente, atualizado pelo sync diário.
+Vendas Jetimob - KPIs, ranking e evolução OFICIAL das vendas (relatório Jetimob).
+
+VENDAS: usa tabela `resumo_mensal_jetimob` (raspagem do relatório oficial do
+Jetimob — bate 100% com o que Anderson vê na tela de relatórios do CRM).
+
+LOCAÇÕES: usa `oportunidades_ganhas_jetimob` (sync kanban), pois o relatório
+oficial só tem venda.
+
+Detalhe (lista de cada venda individual): usa `oportunidades_ganhas_jetimob`.
 """
 from datetime import date
 
@@ -18,14 +25,26 @@ _MESES_PT = {
 }
 
 
+@st.cache_data(ttl=300, show_spinner="Carregando resumo oficial Jetimob...")
+def _fetch_resumo_mensal() -> pd.DataFrame:
+    """Tabela resumo_mensal_jetimob — totais oficiais do Jetimob."""
+    client = get_supabase_client()
+    resp = (client.table("resumo_mensal_jetimob").select("*")
+                  .order("mes_referencia", desc=True).execute())
+    if not resp.data:
+        return pd.DataFrame()
+    df = pd.DataFrame(resp.data)
+    df["mes_referencia"] = pd.to_datetime(df["mes_referencia"]).dt.date
+    df["valor_reais"] = df["valor_total_cents"] / 100.0
+    return df
+
+
 @st.cache_data(ttl=300, show_spinner="Carregando ganhas Jetimob...")
 def _fetch_ganhas() -> pd.DataFrame:
-    """Lê a tabela oportunidades_ganhas_jetimob do Supabase."""
+    """Tabela oportunidades_ganhas_jetimob — lista individual pra detalhe."""
     client = get_supabase_client()
-    resp = (client.table("oportunidades_ganhas_jetimob")
-                  .select("*")
-                  .order("entrou_etapa_em", desc=True)
-                  .execute())
+    resp = (client.table("oportunidades_ganhas_jetimob").select("*")
+                  .order("entrou_etapa_em", desc=True).execute())
     if not resp.data:
         return pd.DataFrame()
     df = pd.DataFrame(resp.data)
@@ -45,6 +64,10 @@ def _kpi_card(label: str, valor: str, sub: str, kind: str = "") -> str:
     )
 
 
+def _fmt_brl(v: float) -> str:
+    return f"R$ {v:,.0f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
 def render() -> None:
     user = get_usuario_atual()
     if not user:
@@ -53,155 +76,221 @@ def render() -> None:
 
     hoje = date.today()
     mes_label = f"{_MESES_PT[hoje.month]}/{hoje.year}"
+    mes_atual_date = date(hoje.year, hoje.month, 1)
 
     st.markdown(f"""
     <div class="nl-header">
-        <div class="badge">Jetimob · Sync Diário</div>
+        <div class="badge">Jetimob · Oficial</div>
         <h1>Vendas do <span>Mês</span></h1>
-        <div class="sub">Oportunidades ganhas do Jetimob · <strong>{escape(mes_label)}</strong></div>
+        <div class="sub">Dados oficiais do Jetimob · <strong>{escape(mes_label)}</strong></div>
     </div>
     """, unsafe_allow_html=True)
 
-    df = _fetch_ganhas()
-    if df.empty:
-        st.info("Nenhuma oportunidade ganha sincronizada ainda. "
-                "Rode `python scripts/sync_jetimob_ganhas.py` pra popular.")
+    # =========================================================
+    # Fonte-de-verdade: VENDAS vem do resumo oficial
+    # =========================================================
+    df_resumo = _fetch_resumo_mensal()
+    df_ganhas = _fetch_ganhas()
+
+    if df_resumo.empty and df_ganhas.empty:
+        st.info("Nenhum dado sincronizado ainda. "
+                "Rode `scripts/sync_relatorio_ganhas.py` + `scripts/sync_jetimob_ganhas.py`.")
         return
 
-    # Filtra por perfil — corretor só vê as próprias (usa corretor_nome_jetimob do usuário)
-    if is_corretor() and not pode_ver_tudo():
-        nome_jetimob = (user.get("corretor_nome_jetimob") or "").strip()
-        if not nome_jetimob:
-            st.error("Seu cadastro nao tem 'nome no Jetimob' configurado.")
-            st.stop()
-        df = df[df["corretor_nome"].str.strip().str.lower() == nome_jetimob.lower()]
+    # Filtra resumo do mês atual (venda)
+    resumo_mes = df_resumo[(df_resumo["mes_referencia"] == mes_atual_date)
+                           & (df_resumo["tipo"] == "venda")]
 
-    # Recorte: fechamentos do mês atual
-    inicio_mes = pd.Timestamp(hoje.year, hoje.month, 1, tz="UTC")
-    prox_mes = (inicio_mes + pd.offsets.MonthBegin(1))
-    df_mes = df[(df["etapa"] == "Fechamento") &
-                (df["entrou_etapa_em"] >= inicio_mes) &
-                (df["entrou_etapa_em"] < prox_mes)]
+    qtd_vendas = int(resumo_mes["qtd_ganhas"].iloc[0]) if not resumo_mes.empty else 0
+    vgv = float(resumo_mes["valor_reais"].iloc[0]) if not resumo_mes.empty else 0.0
+    ranking_vendas = (resumo_mes["ranking_json"].iloc[0]
+                      if not resumo_mes.empty else []) or []
+
+    # Locações do mês (sync kanban, pois relatório oficial não tem)
+    if not df_ganhas.empty:
+        ini = pd.Timestamp(hoje.year, hoje.month, 1, tz="UTC")
+        fim = ini + pd.offsets.MonthBegin(1)
+        df_l_mes = df_ganhas[(df_ganhas["contrato"] == "locacao")
+                             & (df_ganhas["etapa"] == "Fechamento")
+                             & (df_ganhas["entrou_etapa_em"] >= ini)
+                             & (df_ganhas["entrou_etapa_em"] < fim)]
+    else:
+        df_l_mes = pd.DataFrame()
+
+    qtd_loc = len(df_l_mes)
+    valor_loc = float(df_l_mes["valor_reais"].sum()) if qtd_loc else 0.0
 
     # KPIs
-    df_v = df_mes[df_mes["contrato"] == "venda"]
-    df_l = df_mes[df_mes["contrato"] == "locacao"]
-    vgv = df_v["valor_reais"].sum()
-    loc_valor = df_l["valor_reais"].sum()
-
+    ticket = vgv / qtd_vendas if qtd_vendas else 0
     cols_kpi = "".join([
-        _kpi_card("VGV do Mês", f"R$ {vgv:,.0f}".replace(",", "."),
-                  f"{len(df_v)} venda(s)", "green"),
-        _kpi_card("Locações do Mês", f"R$ {loc_valor:,.0f}".replace(",", "."),
-                  f"{len(df_l)} locação(ões)", "azul"),
-        _kpi_card("Total Fechamentos", str(len(df_mes)),
+        _kpi_card("VGV do Mês", _fmt_brl(vgv),
+                  f"{qtd_vendas} venda(s) · Oficial Jetimob", "green"),
+        _kpi_card("Locações do Mês", _fmt_brl(valor_loc),
+                  f"{qtd_loc} locação(ões)", "azul"),
+        _kpi_card("Total Fechamentos", str(qtd_vendas + qtd_loc),
                   escape(mes_label)),
         _kpi_card("Ticket Médio Venda",
-                  (f"R$ {(vgv / len(df_v)):,.0f}".replace(",", ".")
-                   if len(df_v) else "—"),
+                  _fmt_brl(ticket) if ticket else "—",
                   "por venda fechada"),
     ])
     st.markdown(f'<div class="kpi-grid">{cols_kpi}</div>', unsafe_allow_html=True)
 
-    # Ranking de corretores (mês)
+    # =========================================================
+    # Ranking — Vendas (oficial) + Locações (kanban)
+    # =========================================================
     st.markdown("""
     <div class="section-hdr">
         <div class="section-icon" style="background:var(--nl-ouro-vivo);">🏆</div>
         <div><h2>Ranking do Mês</h2>
-             <p>Fechamentos (venda + locação) no mês vigente</p></div>
+             <p>Vendas: dados oficiais do Jetimob · Locações: kanban</p></div>
     </div>
     """, unsafe_allow_html=True)
 
-    if df_mes.empty:
+    # Consolida: por corretor, somar vendas+locações
+    consolidado: dict[str, dict] = {}
+    for rk in ranking_vendas:
+        nome = rk["nome"]
+        consolidado.setdefault(nome, {"venda_q": 0, "venda_v": 0.0,
+                                      "loc_q": 0, "loc_v": 0.0})
+        consolidado[nome]["venda_q"] += int(rk.get("qtd", 0))
+        consolidado[nome]["venda_v"] += float(rk.get("valor_cents", 0)) / 100.0
+
+    if not df_l_mes.empty:
+        rk_loc = df_l_mes.groupby("corretor_nome").agg(
+            qtd=("jetimob_id", "count"), valor=("valor_reais", "sum")
+        ).reset_index()
+        for _, row in rk_loc.iterrows():
+            nome = row["corretor_nome"]
+            consolidado.setdefault(nome, {"venda_q": 0, "venda_v": 0.0,
+                                          "loc_q": 0, "loc_v": 0.0})
+            consolidado[nome]["loc_q"] += int(row["qtd"])
+            consolidado[nome]["loc_v"] += float(row["valor"])
+
+    # Ordena por valor total (venda+locação)
+    ordenado = sorted(consolidado.items(),
+                      key=lambda kv: kv[1]["venda_v"] + kv[1]["loc_v"],
+                      reverse=True)
+
+    if not ordenado:
         st.caption("Nenhum fechamento no mês ainda.")
     else:
-        rk = (df_mes.groupby(["corretor_nome", "contrato"])
-                    .agg(qtd=("jetimob_id", "count"), valor=("valor_reais", "sum"))
-                    .reset_index())
-        rk_tot = (rk.groupby("corretor_nome")["valor"].sum()
-                    .sort_values(ascending=False).reset_index())
         linhas = []
-        for idx, row in rk_tot.iterrows():
-            pos = idx + 1
-            rank_cls = "rank-1" if pos == 1 else "rank-2" if pos == 2 else "rank-3" if pos == 3 else "rank-other"
-            detalhes_venda = rk[(rk["corretor_nome"] == row["corretor_nome"]) & (rk["contrato"] == "venda")]
-            detalhes_loc = rk[(rk["corretor_nome"] == row["corretor_nome"]) & (rk["contrato"] == "locacao")]
+        for pos, (nome, d) in enumerate(ordenado, 1):
+            rank_cls = ("rank-1" if pos == 1 else "rank-2" if pos == 2
+                        else "rank-3" if pos == 3 else "rank-other")
             sub = []
-            if not detalhes_venda.empty:
-                q = int(detalhes_venda["qtd"].iloc[0])
-                sub.append(f"{q} venda(s)")
-            if not detalhes_loc.empty:
-                q = int(detalhes_loc["qtd"].iloc[0])
-                sub.append(f"{q} locação(ões)")
+            if d["venda_q"]:
+                sub.append(f"{d['venda_q']} venda(s)")
+            if d["loc_q"]:
+                sub.append(f"{d['loc_q']} locação(ões)")
+            total = d["venda_v"] + d["loc_v"]
             linhas.append(
                 f'<div class="ranking-item">'
                 f'<div class="rank-num {rank_cls}">{pos}</div>'
                 f'<div style="flex:1">'
-                f'  <div class="rank-name">{escape(row["corretor_nome"])}</div>'
+                f'  <div class="rank-name">{escape(nome)}</div>'
                 f'  <div class="rank-sub">{" · ".join(sub)}</div>'
                 f'</div>'
-                f'<div class="rank-value">R$ {row["valor"]:,.0f}</div>'
-                f'</div>'.replace(",", ".")
+                f'<div class="rank-value">{_fmt_brl(total)}</div>'
+                f'</div>'
             )
         st.markdown("\n".join(linhas), unsafe_allow_html=True)
 
-    # Evolução 6 meses
+    # =========================================================
+    # Evolução últimos 6 meses — dados oficiais
+    # =========================================================
     st.markdown("""
     <div class="section-hdr">
         <div class="section-icon">📈</div>
-        <div><h2>Evolução — Últimos 6 meses</h2>
-             <p>Comparativo histórico de fechamentos</p></div>
+        <div><h2>Evolução Histórica — Vendas</h2>
+             <p>VGV mensal oficial do Jetimob</p></div>
     </div>
     """, unsafe_allow_html=True)
 
-    df_fech = df[df["etapa"] == "Fechamento"].copy()
-    if df_fech.empty:
-        st.caption("Sem histórico de fechamentos.")
+    vendas_hist = df_resumo[df_resumo["tipo"] == "venda"].copy()
+    if vendas_hist.empty:
+        st.caption("Sem histórico sincronizado.")
     else:
-        df_fech["mes"] = df_fech["entrou_etapa_em"].dt.strftime("%Y-%m")
-        agg = (df_fech.groupby(["mes", "contrato"])["valor_reais"]
-                      .sum().reset_index())
-        fig = px.bar(agg, x="mes", y="valor_reais", color="contrato",
-                     barmode="group",
-                     color_discrete_map={"venda": "#033677", "locacao": "#FFB700"},
-                     labels={"mes": "Mês", "valor_reais": "R$", "contrato": "Contrato"})
-        fig.update_layout(height=360, margin=dict(l=0, r=0, t=10, b=0))
+        vendas_hist = vendas_hist.sort_values("mes_referencia")
+        vendas_hist["mes"] = vendas_hist["mes_referencia"].apply(
+            lambda d: f"{_MESES_PT[d.month][:3]}/{str(d.year)[-2:]}")
+        fig = px.bar(vendas_hist, x="mes", y="valor_reais",
+                     color_discrete_sequence=["#033677"],
+                     labels={"mes": "", "valor_reais": "VGV (R$)"},
+                     text=vendas_hist["qtd_ganhas"].apply(lambda n: f"{n} vendas"))
+        fig.update_traces(textposition="outside")
+        fig.update_layout(height=360, margin=dict(l=0, r=0, t=30, b=0),
+                          showlegend=False)
         st.plotly_chart(fig, use_container_width=True)
 
-    # Detalhe do mês
+    # =========================================================
+    # Detalhe do mês (lista individual das vendas)
+    # =========================================================
     st.markdown("""
     <div class="section-hdr">
         <div class="section-icon" style="background:var(--nl-azul-horizonte);">📋</div>
         <div><h2>Fechamentos do Mês — detalhe</h2>
-             <p>Lista das oportunidades fechadas</p></div>
+             <p>Lista individual (do kanban Jetimob)</p></div>
     </div>
     """, unsafe_allow_html=True)
 
-    if df_mes.empty:
-        st.caption("Nenhum fechamento no mês para mostrar.")
+    # Pra detalhe, usa o kanban mas mostra só quem tem ganha_em no mês (quando disponível)
+    # OU que entrou em Fechamento no mês
+    if df_ganhas.empty:
+        st.caption("Sem sync detalhado.")
     else:
-        cols_show = ["entrou_etapa_em", "contrato", "corretor_nome",
-                     "nome_cliente", "valor_reais", "telefone_e164", "email"]
-        tabela = df_mes[cols_show].copy()
-        tabela["entrou_etapa_em"] = tabela["entrou_etapa_em"].dt.strftime("%d/%m/%Y")
-        tabela = tabela.rename(columns={
-            "entrou_etapa_em": "Data",
-            "contrato": "Tipo",
-            "corretor_nome": "Corretor",
-            "nome_cliente": "Cliente",
-            "valor_reais": "Valor (R$)",
-            "telefone_e164": "Telefone",
-            "email": "Email",
-        })
-        if not pode_ver_tudo():
-            tabela = tabela.drop(columns=["Telefone", "Email"], errors="ignore")
-        st.dataframe(tabela, use_container_width=True, hide_index=True)
+        ini = pd.Timestamp(hoje.year, hoje.month, 1, tz="UTC")
+        fim = ini + pd.offsets.MonthBegin(1)
 
-    # Rodapé com info de sync
-    ultimo_sync = df["scraped_at"].max() if "scraped_at" in df.columns else None
+        # Filtro corretor
+        if is_corretor() and not pode_ver_tudo():
+            nome_jetimob = (user.get("corretor_nome_jetimob") or "").strip()
+            if not nome_jetimob:
+                st.error("Seu cadastro nao tem 'nome no Jetimob' configurado.")
+                st.stop()
+            df_ganhas = df_ganhas[
+                df_ganhas["corretor_nome"].str.strip().str.lower() == nome_jetimob.lower()
+            ]
+
+        # Pega ganha_em se disponivel, senao entrou_etapa_em
+        if "ganha_em" in df_ganhas.columns:
+            df_ganhas["ganha_em_dt"] = pd.to_datetime(
+                df_ganhas["ganha_em"], utc=True, errors="coerce"
+            )
+            filtro = ((df_ganhas["ganha_em_dt"] >= ini)
+                      & (df_ganhas["ganha_em_dt"] < fim))
+            df_detalhe = df_ganhas[filtro]
+        else:
+            df_detalhe = df_ganhas[(df_ganhas["entrou_etapa_em"] >= ini)
+                                   & (df_ganhas["entrou_etapa_em"] < fim)]
+
+        if df_detalhe.empty:
+            st.caption("Nenhum fechamento detalhado no mês.")
+        else:
+            cols_show = ["entrou_etapa_em", "contrato", "corretor_nome",
+                         "nome_cliente", "valor_reais", "telefone_e164", "email"]
+            tabela = df_detalhe[[c for c in cols_show if c in df_detalhe.columns]].copy()
+            tabela["entrou_etapa_em"] = tabela["entrou_etapa_em"].dt.strftime("%d/%m/%Y")
+            tabela = tabela.rename(columns={
+                "entrou_etapa_em": "Data",
+                "contrato": "Tipo",
+                "corretor_nome": "Corretor",
+                "nome_cliente": "Cliente",
+                "valor_reais": "Valor (R$)",
+                "telefone_e164": "Telefone",
+                "email": "Email",
+            })
+            if not pode_ver_tudo():
+                tabela = tabela.drop(columns=["Telefone", "Email"], errors="ignore")
+            st.dataframe(tabela, use_container_width=True, hide_index=True)
+
+    # Rodapé
+    ultimo_sync = (df_resumo["scraped_at"].max()
+                   if not df_resumo.empty and "scraped_at" in df_resumo.columns
+                   else None)
     if ultimo_sync:
         try:
             ts = pd.to_datetime(ultimo_sync).strftime("%d/%m/%Y %H:%M")
-            st.caption(f"Última sincronização com Jetimob: {ts}")
+            st.caption(f"🔄 Última sincronização: {ts}")
         except Exception:
             pass
