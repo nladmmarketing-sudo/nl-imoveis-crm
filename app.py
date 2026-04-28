@@ -393,7 +393,17 @@ def main():
         st.markdown("---")
 
         # Menu de navegacao
-        paginas = ["Visao Geral", "Vendas do Mes (Jetimob)", "Equipe Vendas", "Cadastrar Venda", "Equipe Locacao", "Origens de Leads", "Metas & Projecoes", "Minha Conta"]
+        paginas = [
+            "Visao Geral",
+            "Vendas do Mes (Jetimob)",
+            "Locacoes do Mes (Jetimob)",
+            "Equipe Vendas",
+            "Equipe Locacao",
+            "Cadastrar Venda",
+            "Origens de Leads",
+            "Metas & Projecoes",
+            "Minha Conta",
+        ]
         if is_admin():
             paginas.insert(-1, "Gerenciar Usuarios")
             paginas.insert(-1, "Auditoria")
@@ -424,6 +434,9 @@ def main():
     elif pagina == "Vendas do Mes (Jetimob)":
         from views import vendas_jetimob
         vendas_jetimob.render()
+    elif pagina == "Locacoes do Mes (Jetimob)":
+        from views import locacoes_jetimob
+        locacoes_jetimob.render()
     elif pagina == "Equipe Vendas":
         from views import equipe_vendas
         equipe_vendas.render()
