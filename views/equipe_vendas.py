@@ -21,7 +21,7 @@ from utils.filtros import aplicar_filtro, aplicar_filtro_periodo_anterior, perio
 from utils.supabase_client import (
     get_supabase_client, fetch_leads_jetimob, fetch_vendas
 )
-from utils.components import kpi_card_v2, alert_box, calc_trend, sparkline_pts, render_kpi_grid
+from utils.components import kpi_card_v2, alert_box, calc_trend, sparkline_pts
 
 
 _MESES_PT = {
@@ -170,27 +170,34 @@ def render():
             tipo="red", icon="⚠️"
         ), unsafe_allow_html=True)
 
-    # === KPIs V2.0 (grid em 1 markdown) ===
-    cards = [
-        kpi_card_v2("VGV do Periodo", _fmt_brl(vgv_oficial),
-                    f"vs {_fmt_brl(vgv_ant)} em {per_ant_label}",
-                    icon="💰", color="green",
-                    trend=t_vgv, trend_dir=d_vgv,
-                    sparkline_pts_data=spark_vgv),
-        kpi_card_v2("Vendas Fechadas", str(qtd_vendas_oficial),
-                    f"vs {qtd_vendas_ant} em {per_ant_label}",
-                    icon="🏠", color="azul",
-                    trend=t_vendas, trend_dir=d_vendas,
-                    sparkline_pts_data=spark_vendas),
-        kpi_card_v2("Ticket Medio", _fmt_brl(ticket) if ticket else "—",
-                    f"vs {_fmt_brl(ticket_ant)} anterior",
-                    icon="📊", color="dourado",
-                    trend=t_ticket, trend_dir=d_ticket),
-        kpi_card_v2("Total Historico", _fmt_brl(total_ytd_vgv),
-                    f"{total_ytd_qtd} vendas registradas",
-                    icon="📈", color="purple"),
-    ]
-    st.markdown(render_kpi_grid(cards), unsafe_allow_html=True)
+    # === KPIs V2.0 ===
+    st.markdown('<div class="kpi-grid-v2">', unsafe_allow_html=True)
+    st.markdown(kpi_card_v2(
+        "VGV do Periodo", _fmt_brl(vgv_oficial),
+        f"vs {_fmt_brl(vgv_ant)} em {per_ant_label}",
+        icon="💰", color="green",
+        trend=t_vgv, trend_dir=d_vgv,
+        sparkline_pts_data=spark_vgv,
+    ), unsafe_allow_html=True)
+    st.markdown(kpi_card_v2(
+        "Vendas Fechadas", str(qtd_vendas_oficial),
+        f"vs {qtd_vendas_ant} em {per_ant_label}",
+        icon="🏠", color="azul",
+        trend=t_vendas, trend_dir=d_vendas,
+        sparkline_pts_data=spark_vendas,
+    ), unsafe_allow_html=True)
+    st.markdown(kpi_card_v2(
+        "Ticket Medio", _fmt_brl(ticket) if ticket else "—",
+        f"vs {_fmt_brl(ticket_ant)} anterior",
+        icon="📊", color="dourado",
+        trend=t_ticket, trend_dir=d_ticket,
+    ), unsafe_allow_html=True)
+    st.markdown(kpi_card_v2(
+        "Total Historico", _fmt_brl(total_ytd_vgv),
+        f"{total_ytd_qtd} vendas registradas",
+        icon="📈", color="purple",
+    ), unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
     # =========================================================
     # Ranking Vendas (oficial Jetimob)
