@@ -17,11 +17,10 @@ import streamlit as st
 from utils.auth import (
     escape, filtrar_por_perfil, get_usuario_atual, is_corretor, pode_ver_tudo
 )
-from utils.filtros import aplicar_filtro, aplicar_filtro_periodo_anterior, periodo_anterior
+from utils.filtros import aplicar_filtro
 from utils.supabase_client import (
     get_supabase_client, fetch_leads_jetimob, fetch_vendas
 )
-from utils.components import kpi_card_v2, alert_box, calc_trend, sparkline_pts
 
 
 _MESES_PT = {
@@ -125,79 +124,30 @@ def render():
     total_ytd_vgv = float(df_resumo[df_resumo["tipo"] == "venda"]["valor_reais"].sum()) if not df_resumo.empty else 0.0
     total_ytd_qtd = int(df_resumo[df_resumo["tipo"] == "venda"]["qtd_ganhas"].sum()) if not df_resumo.empty else 0
 
-    # === Calcula periodo ANTERIOR pra comparativo ===
-    per_ant_label = periodo_anterior(periodo)
-    if not df_resumo.empty:
-        # Determina mes anterior pra resumo oficial
-        if mes_ref == 1:
-            mes_ant_num, ano_ant_num = 12, ano_ref - 1
-        else:
-            mes_ant_num, ano_ant_num = mes_ref - 1, ano_ref
-        mes_ant_date = date(ano_ant_num, mes_ant_num, 1)
-        resumo_ant = df_resumo[(df_resumo["mes_referencia"] == mes_ant_date)
-                                & (df_resumo["tipo"] == "venda")]
-        qtd_vendas_ant = int(resumo_ant["qtd_ganhas"].iloc[0]) if not resumo_ant.empty else 0
-        vgv_ant = float(resumo_ant["valor_reais"].iloc[0]) if not resumo_ant.empty else 0.0
-    else:
-        qtd_vendas_ant = 0
-        vgv_ant = 0.0
-
-    ticket_ant = vgv_ant / qtd_vendas_ant if qtd_vendas_ant else 0
-
-    # Trends
-    t_vgv, d_vgv = calc_trend(vgv_oficial, vgv_ant)
-    t_vendas, d_vendas = calc_trend(qtd_vendas_oficial, qtd_vendas_ant)
-    t_ticket, d_ticket = calc_trend(ticket, ticket_ant)
-
-    # Sparklines (ultimos 30 dias)
-    df_v_all = df_vendas_unif.copy()
-    if "tipo_negocio" in df_v_all.columns:
-        df_v_all = df_v_all[df_v_all["tipo_negocio"] == "venda"]
-    spark_vendas = sparkline_pts(df_v_all, "data_venda", dias=30)
-    spark_vgv = sparkline_pts(df_v_all, "data_venda", dias=30, col_valor="valor")
-
-    # === Alertas inteligentes ===
-    if vgv_oficial > vgv_ant * 1.15 and vgv_ant > 0:
-        st.markdown(alert_box(
-            "Excelente! Vendas em alta",
-            f"VGV cresceu {((vgv_oficial/vgv_ant - 1)*100):.0f}% vs {per_ant_label}.",
-            tipo="green", icon="🚀"
-        ), unsafe_allow_html=True)
-    elif vgv_ant > 0 and vgv_oficial < vgv_ant * 0.85:
-        st.markdown(alert_box(
-            "VGV em queda",
-            f"VGV caiu {((1 - vgv_oficial/vgv_ant)*100):.0f}% vs {per_ant_label}. Verificar.",
-            tipo="red", icon="⚠️"
-        ), unsafe_allow_html=True)
-
-    # === KPIs V2.0 ===
-    st.markdown('<div class="kpi-grid-v2">', unsafe_allow_html=True)
-    st.markdown(kpi_card_v2(
-        "VGV do Periodo", _fmt_brl(vgv_oficial),
-        f"vs {_fmt_brl(vgv_ant)} em {per_ant_label}",
-        icon="💰", color="green",
-        trend=t_vgv, trend_dir=d_vgv,
-        sparkline_pts_data=spark_vgv,
-    ), unsafe_allow_html=True)
-    st.markdown(kpi_card_v2(
-        "Vendas Fechadas", str(qtd_vendas_oficial),
-        f"vs {qtd_vendas_ant} em {per_ant_label}",
-        icon="🏠", color="azul",
-        trend=t_vendas, trend_dir=d_vendas,
-        sparkline_pts_data=spark_vendas,
-    ), unsafe_allow_html=True)
-    st.markdown(kpi_card_v2(
-        "Ticket Medio", _fmt_brl(ticket) if ticket else "—",
-        f"vs {_fmt_brl(ticket_ant)} anterior",
-        icon="📊", color="dourado",
-        trend=t_ticket, trend_dir=d_ticket,
-    ), unsafe_allow_html=True)
-    st.markdown(kpi_card_v2(
-        "Total Historico", _fmt_brl(total_ytd_vgv),
-        f"{total_ytd_qtd} vendas registradas",
-        icon="📈", color="purple",
-    ), unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown(f"""
+    <div class="kpi-grid">
+        <div class="kpi-card green">
+            <div class="label">VGV do Periodo</div>
+            <div class="num" style="color:#16A34A">{_fmt_brl(vgv_oficial)}</div>
+            <div class="sub">{escape(mes_label)} · Oficial Jetimob</div>
+        </div>
+        <div class="kpi-card azul">
+            <div class="label">Vendas Fechadas</div>
+            <div class="num">{qtd_vendas_oficial}</div>
+            <div class="sub">no periodo selecionado</div>
+        </div>
+        <div class="kpi-card">
+            <div class="label">Ticket Medio</div>
+            <div class="num">{_fmt_brl(ticket) if ticket else '—'}</div>
+            <div class="sub">por venda fechada</div>
+        </div>
+        <div class="kpi-card">
+            <div class="label">Total Historico</div>
+            <div class="num">{_fmt_brl(total_ytd_vgv)}</div>
+            <div class="sub">{total_ytd_qtd} vendas no historico sync</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
     # =========================================================
     # Ranking Vendas (oficial Jetimob)

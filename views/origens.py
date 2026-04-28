@@ -1,13 +1,12 @@
 """
-Origens de Leads - Analise estrategica de canais (v2.0)
+Origens de Leads - Analise estrategica de canais
 """
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 from utils.supabase_client import fetch_leads_jetimob
 from utils.auth import escape
-from utils.filtros import aplicar_filtro, aplicar_filtro_periodo_anterior, periodo_anterior
-from utils.components import kpi_card_v2, alert_box, calc_trend
+from utils.filtros import aplicar_filtro
 
 
 def render():
@@ -31,55 +30,32 @@ def render():
     total = len(df)
     com_origem = df[df["origem"].notna() & (df["origem"] != "")].shape[0]
     sem_origem = total - com_origem
-    canais = df["origem"].nunique()
 
-    # Periodo anterior pra comparativo
-    df_ant = aplicar_filtro_periodo_anterior(df_all, periodo, "created_at")
-    total_ant = len(df_ant)
-    com_origem_ant = df_ant[df_ant["origem"].notna() & (df_ant["origem"] != "")].shape[0] if not df_ant.empty else 0
-    canais_ant = df_ant["origem"].nunique() if not df_ant.empty else 0
-
-    per_ant = periodo_anterior(periodo)
-    t_total, d_total = calc_trend(total, total_ant)
-    t_com, d_com = calc_trend(com_origem, com_origem_ant)
-    t_canais, d_canais = calc_trend(canais, canais_ant)
-
-    # Alerta se rastreamento ruim
-    if total > 0 and sem_origem / total > 0.3:
-        st.markdown(alert_box(
-            "Rastreamento precisa melhorar",
-            f"{sem_origem/total*100:.0f}% dos leads chegam sem origem identificada. "
-            "Configure rastreamento UTM nos canais.",
-            tipo="orange", icon="⚠️"
-        ), unsafe_allow_html=True)
-
-    cor_sem = "red" if total > 0 and sem_origem/total > 0.3 else "azul"
-
-    st.markdown('<div class="kpi-grid-v2">', unsafe_allow_html=True)
-    st.markdown(kpi_card_v2(
-        "Total de Leads", f"{total:,}",
-        f"vs {total_ant:,} em {per_ant}",
-        icon="📥", color="azul",
-        trend=t_total, trend_dir=d_total,
-    ), unsafe_allow_html=True)
-    st.markdown(kpi_card_v2(
-        "Com Origem", f"{com_origem:,}",
-        f"{com_origem/total*100:.1f}% do total" if total > 0 else "0%",
-        icon="✅", color="green",
-        trend=t_com, trend_dir=d_com,
-    ), unsafe_allow_html=True)
-    st.markdown(kpi_card_v2(
-        "Sem Rastreamento", f"{sem_origem:,}",
-        f"{sem_origem/total*100:.1f}% sem origem" if total > 0 else "0%",
-        icon="⚠️", color=cor_sem,
-    ), unsafe_allow_html=True)
-    st.markdown(kpi_card_v2(
-        "Canais Ativos", str(canais),
-        f"vs {canais_ant} em {per_ant}",
-        icon="📊", color="dourado",
-        trend=t_canais, trend_dir=d_canais,
-    ), unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown(f"""
+    <div class="kpi-grid">
+        <div class="kpi-card">
+            <div class="label">Total de Leads</div>
+            <div class="num">{total:,}</div>
+            <div class="sub">{escape(periodo)}</div>
+        </div>
+        <div class="kpi-card azul">
+            <div class="label">Com Origem Identificada</div>
+            <div class="num">{com_origem:,}</div>
+            <div class="sub">{com_origem/total*100:.1f}% do total</div>
+        </div>
+        <div class="kpi-card {'red' if total > 0 and sem_origem/total > 0.3 else ''}">
+            <div class="label">Sem Origem</div>
+            <div class="num" style="color:{'#DC2626' if total > 0 and sem_origem/total > 0.3 else '#033677'}">{sem_origem:,}</div>
+            <div class="sub">{sem_origem/total*100:.1f}% sem rastreamento</div>
+            {'<span class="kpi-badge badge-red">Rastreamento precisa melhorar</span>' if total > 0 and sem_origem/total > 0.3 else ''}
+        </div>
+        <div class="kpi-card">
+            <div class="label">Canais Ativos</div>
+            <div class="num">{df["origem"].nunique()}</div>
+            <div class="sub">origens distintas</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
     df_origem = df[df["origem"].notna() & (df["origem"] != "")]
 

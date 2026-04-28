@@ -17,11 +17,10 @@ import streamlit as st
 from utils.auth import (
     escape, filtrar_por_perfil, get_usuario_atual, is_corretor, pode_ver_tudo
 )
-from utils.filtros import aplicar_filtro, aplicar_filtro_periodo_anterior, periodo_anterior
+from utils.filtros import aplicar_filtro
 from utils.supabase_client import (
     get_supabase_client, fetch_leads_jetimob, fetch_vendas
 )
-from utils.components import kpi_card_v2, alert_box, calc_trend, sparkline_pts
 
 
 _MESES_PT = {
@@ -132,83 +131,33 @@ def render():
     aluguel_medio = receita / qtd if qtd else 0.0
     receita_total_historico = float(df_loc["valor_reais"].sum()) if not df_loc.empty else 0.0
 
-    # === Calcula periodo anterior ===
-    per_ant_label = periodo_anterior(periodo)
-
-    # Mes anterior
-    if mes_ref == 1:
-        mes_ant_num, ano_ant_num = 12, ano_ref - 1
-    else:
-        mes_ant_num, ano_ant_num = mes_ref - 1, ano_ref
-
-    if not df_loc.empty:
-        ini_ant = pd.Timestamp(ano_ant_num, mes_ant_num, 1, tz="UTC")
-        fim_ant = ini_ant + pd.offsets.MonthBegin(1)
-        if "ganha_em_dt" in df_loc.columns:
-            df_mes_ant = df_loc[(df_loc["ganha_em_dt"] >= ini_ant) & (df_loc["ganha_em_dt"] < fim_ant)]
-        else:
-            df_mes_ant = df_loc[(df_loc["entrou_etapa_em"] >= ini_ant) & (df_loc["entrou_etapa_em"] < fim_ant)]
-    else:
-        df_mes_ant = pd.DataFrame()
-
-    qtd_ant = len(df_mes_ant)
-    receita_ant = float(df_mes_ant["valor_reais"].sum()) if qtd_ant else 0.0
-    aluguel_medio_ant = receita_ant / qtd_ant if qtd_ant else 0
-
-    # Trends
-    t_qtd, d_qtd = calc_trend(qtd, qtd_ant)
-    t_rec, d_rec = calc_trend(receita, receita_ant)
-    t_alug, d_alug = calc_trend(aluguel_medio, aluguel_medio_ant)
-
-    # Sparklines (locacoes diarias ultimos 30 dias)
-    df_l_all = df_vendas_unif.copy()
-    if "tipo_negocio" in df_l_all.columns:
-        df_l_all = df_l_all[df_l_all["tipo_negocio"] == "aluguel"]
-    spark_loc = sparkline_pts(df_l_all, "data_venda", dias=30) if not df_l_all.empty else []
-    spark_rec = sparkline_pts(df_l_all, "data_venda", dias=30, col_valor="valor") if not df_l_all.empty else []
-
-    # === Alertas ===
-    if receita > receita_ant * 1.15 and receita_ant > 0:
-        st.markdown(alert_box(
-            "Locacoes em alta!",
-            f"Receita cresceu {((receita/receita_ant - 1)*100):.0f}% vs {per_ant_label}.",
-            tipo="green", icon="🚀"
-        ), unsafe_allow_html=True)
-    elif receita_ant > 0 and receita < receita_ant * 0.85:
-        st.markdown(alert_box(
-            "Receita de locacao em queda",
-            f"Receita caiu {((1 - receita/receita_ant)*100):.0f}% vs {per_ant_label}.",
-            tipo="red", icon="⚠️"
-        ), unsafe_allow_html=True)
-
-    # === KPIs v2.0 ===
-    st.markdown('<div class="kpi-grid-v2">', unsafe_allow_html=True)
-    st.markdown(kpi_card_v2(
-        "Locacoes Fechadas", str(qtd),
-        f"vs {qtd_ant} em {per_ant_label}",
-        icon="🔑", color="azul",
-        trend=t_qtd, trend_dir=d_qtd,
-        sparkline_pts_data=spark_loc,
-    ), unsafe_allow_html=True)
-    st.markdown(kpi_card_v2(
-        "Receita do Periodo", _fmt_brl(receita),
-        f"vs {_fmt_brl(receita_ant)} em {per_ant_label}",
-        icon="💵", color="green",
-        trend=t_rec, trend_dir=d_rec,
-        sparkline_pts_data=spark_rec,
-    ), unsafe_allow_html=True)
-    st.markdown(kpi_card_v2(
-        "Aluguel Medio", _fmt_brl(aluguel_medio) if aluguel_medio else "—",
-        f"vs {_fmt_brl(aluguel_medio_ant)} anterior",
-        icon="📊", color="dourado",
-        trend=t_alug, trend_dir=d_alug,
-    ), unsafe_allow_html=True)
-    st.markdown(kpi_card_v2(
-        "Total Historico", _fmt_brl(receita_total_historico),
-        f"{len(df_loc)} locacoes registradas",
-        icon="📈", color="purple",
-    ), unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+    # =========================================================
+    # KPIs
+    # =========================================================
+    st.markdown(f"""
+    <div class="kpi-grid">
+        <div class="kpi-card azul">
+            <div class="label">Locacoes Fechadas</div>
+            <div class="num">{qtd}</div>
+            <div class="sub">em {escape(mes_label)}</div>
+        </div>
+        <div class="kpi-card green">
+            <div class="label">Receita do Periodo</div>
+            <div class="num" style="color:#16A34A">{_fmt_brl(receita)}</div>
+            <div class="sub">soma dos alugueis</div>
+        </div>
+        <div class="kpi-card">
+            <div class="label">Aluguel Medio</div>
+            <div class="num">{_fmt_brl(aluguel_medio) if aluguel_medio else '—'}</div>
+            <div class="sub">por locacao</div>
+        </div>
+        <div class="kpi-card">
+            <div class="label">Total Historico</div>
+            <div class="num">{_fmt_brl(receita_total_historico)}</div>
+            <div class="sub">{len(df_loc)} locacoes desde inicio do sync</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
     # =========================================================
     # Ranking

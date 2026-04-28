@@ -355,11 +355,6 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-# CSS v2.0 — KPI cards modernos, sparklines, alertas, funil
-from utils.components import CSS_V2
-st.markdown(CSS_V2, unsafe_allow_html=True)
-
-
 def main():
     user = get_usuario_atual()
 

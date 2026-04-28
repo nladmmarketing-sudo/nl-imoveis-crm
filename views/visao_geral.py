@@ -1,20 +1,16 @@
 """
-Visao Geral v2.0 — KPIs com sparklines, trends e alertas inteligentes.
+Visao Geral - KPIs estrategicos e resumo executivo
 """
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 from utils.supabase_client import fetch_leads_jetimob, fetch_vendas
-from utils.auth import (
-    escape, is_corretor, filtrar_por_perfil, get_usuario_atual, pode_ver_tudo
-)
-from utils.filtros import aplicar_filtro, aplicar_filtro_periodo_anterior, periodo_anterior
-from utils.components import (
-    kpi_card_v2, alert_box, calc_trend, sparkline_pts
-)
+from utils.auth import escape, is_admin, is_corretor, filtrar_por_perfil, get_usuario_atual, pode_ver_tudo
+from utils.filtros import aplicar_filtro
 
 
 def render():
+    # Guard de sessao + mapeamento (defesa em profundidade)
     user = get_usuario_atual()
     if not user:
         st.warning("Sessao expirada. Faca login novamente.")
@@ -23,8 +19,7 @@ def render():
         st.error("Seu cadastro nao tem 'nome no Jetimob' configurado. Contate o admin.")
         st.stop()
 
-    periodo = st.session_state.get("periodo_global", "Este mes")
-    per_ant = periodo_anterior(periodo)
+    periodo = st.session_state.get("periodo_global", "Ultimos 30 dias")
 
     st.markdown(f"""
     <div class="nl-header">
@@ -34,154 +29,53 @@ def render():
     </div>
     """, unsafe_allow_html=True)
 
-    # =========================================================
-    # Carrega dados (RBAC + paginado)
-    # =========================================================
+    # Filtra por perfil ANTES de qualquer agregacao
     df_leads_all = filtrar_por_perfil(fetch_leads_jetimob(), "corretor")
     df_vendas_all = filtrar_por_perfil(fetch_vendas(), "corretor")
 
-    # Periodo atual
     df_leads = aplicar_filtro(df_leads_all, periodo, "created_at")
     df_vendas = aplicar_filtro(df_vendas_all, periodo, "data_venda")
 
-    # Periodo anterior (pra comparativo)
-    df_leads_ant = aplicar_filtro_periodo_anterior(df_leads_all, periodo, "created_at")
-    df_vendas_ant = aplicar_filtro_periodo_anterior(df_vendas_all, periodo, "data_venda")
-
-    # Splits venda/locacao
-    if not df_vendas.empty and "tipo_negocio" in df_vendas.columns:
-        df_v = df_vendas[df_vendas["tipo_negocio"] == "venda"]
-        df_l = df_vendas[df_vendas["tipo_negocio"] == "aluguel"]
-    else:
-        df_v = pd.DataFrame()
-        df_l = pd.DataFrame()
-
-    if not df_vendas_ant.empty and "tipo_negocio" in df_vendas_ant.columns:
-        df_v_ant = df_vendas_ant[df_vendas_ant["tipo_negocio"] == "venda"]
-        df_l_ant = df_vendas_ant[df_vendas_ant["tipo_negocio"] == "aluguel"]
-    else:
-        df_v_ant = pd.DataFrame()
-        df_l_ant = pd.DataFrame()
-
-    # Metricas
     total_leads = len(df_leads)
-    total_vendas = len(df_v)
-    total_loc = len(df_l)
-    vgv = float(df_v["valor"].sum()) if not df_v.empty and "valor" in df_v.columns else 0.0
-    receita_loc = float(df_l["valor"].sum()) if not df_l.empty and "valor" in df_l.columns else 0.0
-    ticket = vgv / total_vendas if total_vendas else 0
-    taxa_conv = ((total_vendas + total_loc) / total_leads * 100) if total_leads > 0 else 0
+    total_vendas = len(df_vendas)
 
-    # Anteriores
-    leads_ant = len(df_leads_ant)
-    vendas_ant = len(df_v_ant)
-    loc_ant = len(df_l_ant)
-    vgv_ant = float(df_v_ant["valor"].sum()) if not df_v_ant.empty and "valor" in df_v_ant.columns else 0.0
-    conv_ant = ((vendas_ant + loc_ant) / leads_ant * 100) if leads_ant > 0 else 0
+    vgv = df_vendas["valor"].sum() if not df_vendas.empty and "valor" in df_vendas.columns else 0
+    ticket_medio = vgv / total_vendas if total_vendas > 0 else 0
+    taxa_conversao = (total_vendas / total_leads * 100) if total_leads > 0 else 0
 
-    # Trends
-    t_leads, d_leads = calc_trend(total_leads, leads_ant)
-    t_vendas, d_vendas = calc_trend(total_vendas, vendas_ant)
-    t_loc, d_loc = calc_trend(total_loc, loc_ant)
-    t_vgv, d_vgv = calc_trend(vgv, vgv_ant)
-    t_conv, d_conv = calc_trend(taxa_conv, conv_ant)
-
-    # Sparklines (ultimos 30 dias)
-    spark_leads = sparkline_pts(df_leads_all, "created_at", dias=30)
-    spark_vendas = sparkline_pts(df_vendas_all[df_vendas_all["tipo_negocio"] == "venda"]
-                                  if "tipo_negocio" in df_vendas_all.columns else df_vendas_all,
-                                  "data_venda", dias=30)
-    spark_loc = sparkline_pts(df_vendas_all[df_vendas_all["tipo_negocio"] == "aluguel"]
-                                if "tipo_negocio" in df_vendas_all.columns else df_vendas_all,
-                                "data_venda", dias=30)
-
-    # =========================================================
-    # ALERTAS INTELIGENTES
-    # =========================================================
-    alertas = []
-    if vgv > vgv_ant * 1.15 and vgv_ant > 0:
-        alertas.append(alert_box(
-            "Excelente desempenho de vendas!",
-            f"VGV cresceu {((vgv/vgv_ant - 1)*100):.0f}% comparado ao periodo anterior ({per_ant}).",
-            tipo="green", icon="🚀"
-        ))
-    if vgv_ant > 0 and vgv < vgv_ant * 0.85:
-        alertas.append(alert_box(
-            "Atencao: VGV em queda",
-            f"VGV caiu {((1 - vgv/vgv_ant)*100):.0f}% vs {per_ant}. Verificar ritmo das vendas.",
-            tipo="red", icon="⚠️"
-        ))
-    if taxa_conv < 1 and total_leads > 50:
-        alertas.append(alert_box(
-            "Conversao abaixo do ideal",
-            f"Taxa de conversao em {taxa_conv:.2f}% (meta: 1.5%+). Investigar qualidade dos canais.",
-            tipo="orange", icon="📉"
-        ))
-    if total_leads > leads_ant * 1.2 and leads_ant > 0:
-        alertas.append(alert_box(
-            "Volume de leads em alta",
-            f"Recebimento de leads cresceu {((total_leads/leads_ant - 1)*100):.0f}% versus {per_ant}.",
-            tipo="azul", icon="📥"
-        ))
-
-    for a in alertas:
-        st.markdown(a, unsafe_allow_html=True)
-
-    # =========================================================
-    # KPIs V2.0 (com sparklines + trends)
-    # =========================================================
+    # Labels dinamicos: corretor ve "Meu/Minhas", outros perfis ve agregado
     label_leads = "Meus Leads" if is_corretor() else "Total de Leads"
-    label_vendas = "Minhas Vendas" if is_corretor() else "Vendas Fechadas"
-    label_loc = "Minhas Locacoes" if is_corretor() else "Locacoes Fechadas"
-    label_vgv = "Meu VGV" if is_corretor() else "VGV de Vendas"
+    label_negocios = "Minhas Vendas" if is_corretor() else "Negocios Fechados"
+    label_vgv = "Meu VGV" if is_corretor() else "VGV Total"
 
-    st.markdown('<div class="kpi-grid-v2">', unsafe_allow_html=True)
+    # KPIs
+    st.markdown(f"""
+    <div class="kpi-grid">
+        <div class="kpi-card">
+            <div class="label">{label_leads}</div>
+            <div class="num">{total_leads:,}</div>
+            <div class="sub">Jetimob CRM · {escape(periodo)}</div>
+        </div>
+        <div class="kpi-card azul">
+            <div class="label">{label_negocios}</div>
+            <div class="num">{total_vendas}</div>
+            <div class="sub">Vendas + Locacoes</div>
+        </div>
+        <div class="kpi-card green">
+            <div class="label">{label_vgv}</div>
+            <div class="num" style="color:#16A34A">R${vgv:,.0f}</div>
+            <div class="sub">Ticket medio: R${ticket_medio:,.0f}</div>
+        </div>
+        <div class="kpi-card {'green' if taxa_conversao > 1 else 'red'}">
+            <div class="label">Taxa de Conversao</div>
+            <div class="num" style="color:{'#16A34A' if taxa_conversao > 1 else '#DC2626'}">{taxa_conversao:.2f}%</div>
+            <div class="sub">Lead → Negocio fechado</div>
+            <span class="kpi-badge {'badge-green' if taxa_conversao > 1 else 'badge-red'}">{'Saudavel' if taxa_conversao > 1 else 'Abaixo do ideal'}</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-    st.markdown(kpi_card_v2(
-        label_vgv, f"R${vgv:,.0f}",
-        f"vs R${vgv_ant:,.0f} em {per_ant}",
-        icon="💰", color="green",
-        trend=t_vgv, trend_dir=d_vgv,
-        sparkline_pts_data=spark_vendas
-    ), unsafe_allow_html=True)
-
-    st.markdown(kpi_card_v2(
-        label_vendas, str(total_vendas),
-        f"vs {vendas_ant} em {per_ant} · ticket R${ticket:,.0f}",
-        icon="🏠", color="azul",
-        trend=t_vendas, trend_dir=d_vendas,
-        sparkline_pts_data=spark_vendas
-    ), unsafe_allow_html=True)
-
-    st.markdown(kpi_card_v2(
-        label_loc, str(total_loc),
-        f"R${receita_loc:,.0f} em receita",
-        icon="🔑", color="dourado",
-        trend=t_loc, trend_dir=d_loc,
-        sparkline_pts_data=spark_loc
-    ), unsafe_allow_html=True)
-
-    st.markdown(kpi_card_v2(
-        label_leads, f"{total_leads:,}",
-        f"vs {leads_ant:,} em {per_ant}",
-        icon="📥", color="purple",
-        trend=t_leads, trend_dir=d_leads,
-        sparkline_pts_data=spark_leads
-    ), unsafe_allow_html=True)
-
-    cor_conv = "green" if taxa_conv >= 1.5 else ("dourado" if taxa_conv >= 1 else "red")
-    st.markdown(kpi_card_v2(
-        "Taxa Conversao", f"{taxa_conv:.2f}%",
-        f"vs {conv_ant:.2f}% anterior · meta 1,5%",
-        icon="🎯", color=cor_conv,
-        trend=t_conv, trend_dir=d_conv
-    ), unsafe_allow_html=True)
-
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    # =========================================================
     # Charts
-    # =========================================================
     col1, col2 = st.columns(2)
 
     with col1:
@@ -224,22 +118,22 @@ def render():
             st.info("Sem dados de origem.")
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # =========================================================
-    # Ranking de corretores (fechamentos do periodo)
-    # =========================================================
+    # Ranking Corretores — apenas para perfis que veem todos os corretores
+    # OBS: leads recebidos via webhook nao tem campo 'corretor' (so as oportunidades ganhas tem).
+    # Por isso aqui mostramos ranking de leads COM corretor — mas se vazio, mostra ranking de FECHAMENTOS.
     if pode_ver_tudo():
         st.markdown("""
         <div class="section-hdr">
             <div class="section-icon">🏆</div>
             <div>
                 <h2>Ranking de Corretores</h2>
-                <p>Performance de fechamentos no periodo</p>
+                <p>Performance de fechamentos no periodo (vendas + locacoes)</p>
             </div>
         </div>
         """, unsafe_allow_html=True)
 
+        # Tenta primeiro ranking por LEADS atribuidos (campo `corretor`)
         ranking_html = ""
-        # Tenta primeiro por leads atribuidos (campo corretor)
         if not df_leads.empty and "corretor" in df_leads.columns:
             corretor_data = df_leads[df_leads["corretor"].notna() & (df_leads["corretor"] != "")]
             if not corretor_data.empty:
@@ -263,7 +157,7 @@ def render():
                     </div>
                     """
 
-        # Fallback: ranking por VENDAS/FECHAMENTOS
+        # Fallback: se nao tem ranking por leads, usa ranking por VENDAS/FECHAMENTOS
         if not ranking_html and not df_vendas.empty and "corretor" in df_vendas.columns:
             v_data = df_vendas[df_vendas["corretor"].notna() & (df_vendas["corretor"] != "")]
             if not v_data.empty:
@@ -294,30 +188,35 @@ def render():
         else:
             st.info("Sem fechamentos ou leads atribuidos a corretor no periodo selecionado.")
 
-    # =========================================================
     # Recent leads (PII reduzida)
-    # =========================================================
     st.markdown("""
     <div class="section-hdr">
         <div class="section-icon">📋</div>
         <div>
             <h2>Ultimos Leads Recebidos</h2>
-            <p>Nome, email e codigo do imovel · Para detalhes consulte o Jetimob</p>
+            <p>Nome, email e codigo do imovel · Para telefone/detalhes, consulte o Jetimob CRM</p>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
     if not df_leads.empty:
+        # PII: mostrar apenas nome, email, codigo_imovel, origem, corretor, status
         cols_show = ["created_at", "nome", "email", "codigo_imovel", "origem", "corretor", "status"]
         available = [c for c in cols_show if c in df_leads.columns]
         recent = df_leads.head(20)[available].copy()
-        rename = {"created_at": "Data", "nome": "Nome", "email": "Email",
-                  "codigo_imovel": "Codigo Imovel", "origem": "Origem",
-                  "corretor": "Corretor", "status": "Status"}
+        rename = {
+            "created_at": "Data",
+            "nome": "Nome",
+            "email": "Email",
+            "codigo_imovel": "Codigo Imovel",
+            "origem": "Origem",
+            "corretor": "Corretor",
+            "status": "Status",
+        }
         recent = recent.rename(columns={k: v for k, v in rename.items() if k in recent.columns})
 
-        busca = st.text_input("🔍 Buscar (nome, email, codigo, corretor)",
-                               placeholder="Digite pra filtrar...", key="busca_visao")
+        # Busca
+        busca = st.text_input("🔍 Buscar (nome, email, codigo, corretor)", placeholder="Digite pra filtrar...", key="busca_visao")
         if busca:
             mask = pd.Series([False] * len(recent))
             for col in recent.columns:
@@ -326,14 +225,16 @@ def render():
 
         st.dataframe(recent, use_container_width=True, hide_index=True)
 
+        # Export CSV
         csv = recent.to_csv(index=False).encode("utf-8")
         st.download_button(
-            "📥 Exportar (CSV)",
+            "📥 Exportar leads (CSV)",
             data=csv,
-            file_name=f"leads_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.csv",
+            file_name=f"leads_recentes_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.csv",
             mime="text/csv",
-            key="dl_visao",
         )
+
+        st.caption(f"ℹ️ Para ver telefones e historico completo de cada lead, acesse o Jetimob CRM.")
 
     # Footer
     st.markdown("""
