@@ -395,8 +395,6 @@ def main():
         # Menu de navegacao
         paginas = [
             "Visao Geral",
-            "Vendas do Mes (Jetimob)",
-            "Locacoes do Mes (Jetimob)",
             "Equipe Vendas",
             "Equipe Locacao",
             "Cadastrar Venda",
@@ -431,12 +429,6 @@ def main():
     if pagina == "Visao Geral":
         from views import visao_geral
         visao_geral.render()
-    elif pagina == "Vendas do Mes (Jetimob)":
-        from views import vendas_jetimob
-        vendas_jetimob.render()
-    elif pagina == "Locacoes do Mes (Jetimob)":
-        from views import locacoes_jetimob
-        locacoes_jetimob.render()
     elif pagina == "Equipe Vendas":
         from views import equipe_vendas
         equipe_vendas.render()
