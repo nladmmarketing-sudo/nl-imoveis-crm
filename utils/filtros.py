@@ -26,37 +26,39 @@ ATALHOS = {
 }
 
 
-def _opcoes_meses_anos() -> list[str]:
-    """
-    Gera lista de meses individuais (ultimos 24 meses) + anos completos.
-    Mostra do mais recente pro mais antigo.
-    """
-    hoje = datetime.now()
-    opcoes = []
+def _opcoes_ano_atual() -> list[str]:
+    """Todos os 12 meses do ano atual (Janeiro/2026, Fevereiro/2026, ..., Dezembro/2026)."""
+    ano = datetime.now().year
+    return [f"{_MESES_PT[m]}/{ano}" for m in range(1, 13)]
 
-    # Meses individuais — 24 meses pra tras
-    for i in range(24):
-        ano = hoje.year
-        mes = hoje.month - i
-        while mes <= 0:
-            mes += 12
-            ano -= 1
-        opcoes.append(f"{_MESES_PT[mes]}/{ano}")
 
-    # Anos completos
-    anos_unicos = sorted({datetime(hoje.year, hoje.month, 1).year - i for i in range(3)}, reverse=True)
-    for a in anos_unicos:
-        opcoes.append(f"Ano {a}")
-
-    return opcoes
+def _opcoes_ano_anterior() -> list[str]:
+    """Todos os 12 meses do ano anterior."""
+    ano = datetime.now().year - 1
+    return [f"{_MESES_PT[m]}/{ano}" for m in range(1, 13)]
 
 
 def todas_opcoes() -> list[str]:
-    """Lista completa de opcoes do filtro: atalhos + meses + anos"""
+    """
+    Lista completa do filtro de periodo:
+    - Atalhos rapidos (Hoje, 7d, 30d, mes atual, etc)
+    - Todos os meses do ano atual
+    - Anos completos (atual + anterior)
+    - Todos os meses do ano anterior (historico)
+    """
+    ano_atual = datetime.now().year
+    ano_anterior = ano_atual - 1
+
     atalhos_keys = list(ATALHOS.keys())
-    meses_anos = _opcoes_meses_anos()
-    # Separador visual
-    return atalhos_keys + ["── Meses ──"] + meses_anos
+    return (
+        atalhos_keys
+        + [f"── {ano_atual} ──"]
+        + _opcoes_ano_atual()
+        + [f"── Anos ──"]
+        + [f"Ano {ano_atual}", f"Ano {ano_anterior}"]
+        + [f"── {ano_anterior} ──"]
+        + _opcoes_ano_anterior()
+    )
 
 
 def seletor_periodo(key: str = "periodo_global") -> str:
@@ -69,8 +71,8 @@ def seletor_periodo(key: str = "periodo_global") -> str:
         key=key,
         help="Filtra todos os dashboards pelo periodo selecionado",
     )
-    # Se selecionar o separador, trata como "Tudo"
-    if periodo == "── Meses ──":
+    # Se selecionar um separador (── XXX ──), trata como "Tudo"
+    if periodo and periodo.startswith("──"):
         return "Tudo"
     return periodo
 
