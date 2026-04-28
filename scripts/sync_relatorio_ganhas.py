@@ -190,12 +190,14 @@ def main() -> None:
                 print(f"[venda]  {ini.strftime('%Y-%m')}: "
                       f"{dados['qtd']:>3} ganhas · "
                       f"R$ {dados['valor_cents']/100:>12,.2f}")
+                from datetime import datetime, timezone
                 resultados.append({
                     "mes_referencia":    ini.isoformat(),
                     "tipo":              "venda",
                     "qtd_ganhas":        dados["qtd"],
                     "valor_total_cents": dados["valor_cents"],
                     "ranking_json":      dados["ranking"],
+                    "scraped_at":        datetime.now(timezone.utc).isoformat(),
                 })
             except Exception as e:
                 print(f"[venda]  {ini.strftime('%Y-%m')}: ERRO {e}")
