@@ -68,21 +68,45 @@ def _fmt_brl(v: float) -> str:
     return f"R$ {v:,.0f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
+def _resolver_mes_do_periodo(periodo: str) -> tuple[int, int, str]:
+    """
+    Converte periodo do filtro global em (ano, mes, label).
+    Se for 'Mes/Ano' especifico, usa esse. Senao usa mes atual.
+    """
+    hoje = date.today()
+    if periodo and "/" in periodo:
+        partes = periodo.split("/")
+        if len(partes) == 2:
+            mes_nome, ano_str = partes
+            mes_num = next((k for k, v in _MESES_PT.items() if v == mes_nome.strip()), None)
+            try:
+                ano = int(ano_str.strip())
+                if mes_num:
+                    return ano, mes_num, f"{_MESES_PT[mes_num]}/{ano}"
+            except ValueError:
+                pass
+    if periodo == "Ultimo mes":
+        primeiro = date(hoje.year, hoje.month, 1)
+        ultimo_anterior = primeiro - pd.Timedelta(days=1)
+        return ultimo_anterior.year, ultimo_anterior.month, f"{_MESES_PT[ultimo_anterior.month]}/{ultimo_anterior.year}"
+    return hoje.year, hoje.month, f"{_MESES_PT[hoje.month]}/{hoje.year}"
+
+
 def render() -> None:
     user = get_usuario_atual()
     if not user:
         st.warning("Sessao expirada. Faca login novamente.")
         st.stop()
 
-    hoje = date.today()
-    mes_label = f"{_MESES_PT[hoje.month]}/{hoje.year}"
-    mes_atual_date = date(hoje.year, hoje.month, 1)
+    periodo_global = st.session_state.get("periodo_global", "Este mes")
+    ano_ref, mes_ref, mes_label = _resolver_mes_do_periodo(periodo_global)
+    mes_atual_date = date(ano_ref, mes_ref, 1)
 
     st.markdown(f"""
     <div class="nl-header">
         <div class="badge">Jetimob · Oficial</div>
         <h1>Vendas do <span>Mês</span></h1>
-        <div class="sub">Dados oficiais do Jetimob · <strong>{escape(mes_label)}</strong></div>
+        <div class="sub">Dados oficiais do Jetimob · Periodo: <strong>{escape(mes_label)}</strong> · Mude no filtro do menu lateral</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -108,7 +132,7 @@ def render() -> None:
 
     # Locações do mês (sync kanban, pois relatório oficial não tem)
     if not df_ganhas.empty:
-        ini = pd.Timestamp(hoje.year, hoje.month, 1, tz="UTC")
+        ini = pd.Timestamp(ano_ref, mes_ref, 1, tz="UTC")
         fim = ini + pd.offsets.MonthBegin(1)
         df_l_mes = df_ganhas[(df_ganhas["contrato"] == "locacao")
                              & (df_ganhas["etapa"] == "Fechamento")
@@ -239,7 +263,7 @@ def render() -> None:
     if df_ganhas.empty:
         st.caption("Sem sync detalhado.")
     else:
-        ini = pd.Timestamp(hoje.year, hoje.month, 1, tz="UTC")
+        ini = pd.Timestamp(ano_ref, mes_ref, 1, tz="UTC")
         fim = ini + pd.offsets.MonthBegin(1)
 
         # Filtro corretor

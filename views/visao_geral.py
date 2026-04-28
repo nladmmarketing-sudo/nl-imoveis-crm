@@ -119,30 +119,32 @@ def render():
         st.markdown('</div>', unsafe_allow_html=True)
 
     # Ranking Corretores — apenas para perfis que veem todos os corretores
+    # OBS: leads recebidos via webhook nao tem campo 'corretor' (so as oportunidades ganhas tem).
+    # Por isso aqui mostramos ranking de leads COM corretor — mas se vazio, mostra ranking de FECHAMENTOS.
     if pode_ver_tudo():
         st.markdown("""
         <div class="section-hdr">
             <div class="section-icon">🏆</div>
             <div>
-                <h2>Ranking de Corretores — Volume de Leads</h2>
-                <p>Distribuicao de leads por corretor no periodo</p>
+                <h2>Ranking de Corretores</h2>
+                <p>Performance de fechamentos no periodo (vendas + locacoes)</p>
             </div>
         </div>
         """, unsafe_allow_html=True)
 
+        # Tenta primeiro ranking por LEADS atribuidos (campo `corretor`)
+        ranking_html = ""
         if not df_leads.empty and "corretor" in df_leads.columns:
             corretor_data = df_leads[df_leads["corretor"].notna() & (df_leads["corretor"] != "")]
             if not corretor_data.empty:
                 ranking = corretor_data["corretor"].value_counts().head(10).reset_index()
                 ranking.columns = ["Corretor", "Leads"]
                 max_leads = ranking["Leads"].max()
-
-                html_ranking = ""
                 for i, row in ranking.iterrows():
                     pos = i + 1
                     rank_class = f"rank-{pos}" if pos <= 3 else "rank-other"
                     pct = row["Leads"] / max_leads * 100
-                    html_ranking += f"""
+                    ranking_html += f"""
                     <div class="ranking-item">
                         <div class="rank-num {rank_class}">{pos}°</div>
                         <div style="flex:1">
@@ -154,11 +156,37 @@ def render():
                         <div class="rank-value">{row['Leads']:,} leads</div>
                     </div>
                     """
-                st.markdown(html_ranking, unsafe_allow_html=True)
-            else:
-                st.info("Nenhum lead com corretor atribuido.")
+
+        # Fallback: se nao tem ranking por leads, usa ranking por VENDAS/FECHAMENTOS
+        if not ranking_html and not df_vendas.empty and "corretor" in df_vendas.columns:
+            v_data = df_vendas[df_vendas["corretor"].notna() & (df_vendas["corretor"] != "")]
+            if not v_data.empty:
+                ranking = v_data.groupby("corretor").agg(
+                    qtd=("nome_cliente", "count"),
+                    total=("valor", "sum"),
+                ).reset_index().sort_values("total", ascending=False).head(10)
+                max_v = ranking["total"].max() if len(ranking) > 0 else 1
+                for i, (_, row) in enumerate(ranking.iterrows(), start=1):
+                    rank_class = f"rank-{i}" if i <= 3 else "rank-other"
+                    pct = row["total"] / max_v * 100 if max_v > 0 else 0
+                    ranking_html += f"""
+                    <div class="ranking-item">
+                        <div class="rank-num {rank_class}">{i}°</div>
+                        <div style="flex:1">
+                            <div class="rank-name">{escape(row['corretor'])}</div>
+                            <div class="rank-sub">{int(row['qtd'])} fechamento(s)</div>
+                            <div style="height:8px;background:#F3F6FA;border-radius:4px;overflow:hidden;margin-top:4px">
+                                <div style="width:{pct:.0f}%;height:100%;background:{'#FFB700' if i == 1 else '#033677' if i <= 3 else '#9CA3AF'};border-radius:4px"></div>
+                            </div>
+                        </div>
+                        <div class="rank-value">R${row['total']:,.0f}</div>
+                    </div>
+                    """
+
+        if ranking_html:
+            st.markdown(ranking_html, unsafe_allow_html=True)
         else:
-            st.info("Sem dados de corretores.")
+            st.info("Sem fechamentos ou leads atribuidos a corretor no periodo selecionado.")
 
     # Recent leads (PII reduzida)
     st.markdown("""
