@@ -21,7 +21,7 @@ from utils.filtros import aplicar_filtro, aplicar_filtro_periodo_anterior, perio
 from utils.supabase_client import (
     get_supabase_client, fetch_leads_jetimob, fetch_vendas
 )
-from utils.components import kpi_card_v2, alert_box, calc_trend, sparkline_pts
+from utils.components import kpi_card_v2, alert_box, calc_trend, sparkline_pts, render_kpi_grid
 
 
 _MESES_PT = {
@@ -181,34 +181,27 @@ def render():
             tipo="red", icon="⚠️"
         ), unsafe_allow_html=True)
 
-    # === KPIs v2.0 ===
-    st.markdown('<div class="kpi-grid-v2">', unsafe_allow_html=True)
-    st.markdown(kpi_card_v2(
-        "Locacoes Fechadas", str(qtd),
-        f"vs {qtd_ant} em {per_ant_label}",
-        icon="🔑", color="azul",
-        trend=t_qtd, trend_dir=d_qtd,
-        sparkline_pts_data=spark_loc,
-    ), unsafe_allow_html=True)
-    st.markdown(kpi_card_v2(
-        "Receita do Periodo", _fmt_brl(receita),
-        f"vs {_fmt_brl(receita_ant)} em {per_ant_label}",
-        icon="💵", color="green",
-        trend=t_rec, trend_dir=d_rec,
-        sparkline_pts_data=spark_rec,
-    ), unsafe_allow_html=True)
-    st.markdown(kpi_card_v2(
-        "Aluguel Medio", _fmt_brl(aluguel_medio) if aluguel_medio else "—",
-        f"vs {_fmt_brl(aluguel_medio_ant)} anterior",
-        icon="📊", color="dourado",
-        trend=t_alug, trend_dir=d_alug,
-    ), unsafe_allow_html=True)
-    st.markdown(kpi_card_v2(
-        "Total Historico", _fmt_brl(receita_total_historico),
-        f"{len(df_loc)} locacoes registradas",
-        icon="📈", color="purple",
-    ), unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+    # === KPIs v2.0 (grid em 1 markdown) ===
+    cards = [
+        kpi_card_v2("Locacoes Fechadas", str(qtd),
+                    f"vs {qtd_ant} em {per_ant_label}",
+                    icon="🔑", color="azul",
+                    trend=t_qtd, trend_dir=d_qtd,
+                    sparkline_pts_data=spark_loc),
+        kpi_card_v2("Receita do Periodo", _fmt_brl(receita),
+                    f"vs {_fmt_brl(receita_ant)} em {per_ant_label}",
+                    icon="💵", color="green",
+                    trend=t_rec, trend_dir=d_rec,
+                    sparkline_pts_data=spark_rec),
+        kpi_card_v2("Aluguel Medio", _fmt_brl(aluguel_medio) if aluguel_medio else "—",
+                    f"vs {_fmt_brl(aluguel_medio_ant)} anterior",
+                    icon="📊", color="dourado",
+                    trend=t_alug, trend_dir=d_alug),
+        kpi_card_v2("Total Historico", _fmt_brl(receita_total_historico),
+                    f"{len(df_loc)} locacoes registradas",
+                    icon="📈", color="purple"),
+    ]
+    st.markdown(render_kpi_grid(cards), unsafe_allow_html=True)
 
     # =========================================================
     # Ranking

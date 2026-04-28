@@ -10,7 +10,7 @@ from utils.auth import (
 )
 from utils.filtros import aplicar_filtro, aplicar_filtro_periodo_anterior, periodo_anterior
 from utils.components import (
-    kpi_card_v2, alert_box, calc_trend, sparkline_pts
+    kpi_card_v2, alert_box, calc_trend, sparkline_pts, render_kpi_grid
 )
 
 
@@ -135,49 +135,34 @@ def render():
     label_loc = "Minhas Locacoes" if is_corretor() else "Locacoes Fechadas"
     label_vgv = "Meu VGV" if is_corretor() else "VGV de Vendas"
 
-    st.markdown('<div class="kpi-grid-v2">', unsafe_allow_html=True)
-
-    st.markdown(kpi_card_v2(
-        label_vgv, f"R${vgv:,.0f}",
-        f"vs R${vgv_ant:,.0f} em {per_ant}",
-        icon="💰", color="green",
-        trend=t_vgv, trend_dir=d_vgv,
-        sparkline_pts_data=spark_vendas
-    ), unsafe_allow_html=True)
-
-    st.markdown(kpi_card_v2(
-        label_vendas, str(total_vendas),
-        f"vs {vendas_ant} em {per_ant} · ticket R${ticket:,.0f}",
-        icon="🏠", color="azul",
-        trend=t_vendas, trend_dir=d_vendas,
-        sparkline_pts_data=spark_vendas
-    ), unsafe_allow_html=True)
-
-    st.markdown(kpi_card_v2(
-        label_loc, str(total_loc),
-        f"R${receita_loc:,.0f} em receita",
-        icon="🔑", color="dourado",
-        trend=t_loc, trend_dir=d_loc,
-        sparkline_pts_data=spark_loc
-    ), unsafe_allow_html=True)
-
-    st.markdown(kpi_card_v2(
-        label_leads, f"{total_leads:,}",
-        f"vs {leads_ant:,} em {per_ant}",
-        icon="📥", color="purple",
-        trend=t_leads, trend_dir=d_leads,
-        sparkline_pts_data=spark_leads
-    ), unsafe_allow_html=True)
-
     cor_conv = "green" if taxa_conv >= 1.5 else ("dourado" if taxa_conv >= 1 else "red")
-    st.markdown(kpi_card_v2(
-        "Taxa Conversao", f"{taxa_conv:.2f}%",
-        f"vs {conv_ant:.2f}% anterior · meta 1,5%",
-        icon="🎯", color=cor_conv,
-        trend=t_conv, trend_dir=d_conv
-    ), unsafe_allow_html=True)
-
-    st.markdown('</div>', unsafe_allow_html=True)
+    cards = [
+        kpi_card_v2(label_vgv, f"R${vgv:,.0f}",
+                    f"vs R${vgv_ant:,.0f} em {per_ant}",
+                    icon="💰", color="green",
+                    trend=t_vgv, trend_dir=d_vgv,
+                    sparkline_pts_data=spark_vendas),
+        kpi_card_v2(label_vendas, str(total_vendas),
+                    f"vs {vendas_ant} em {per_ant} · ticket R${ticket:,.0f}",
+                    icon="🏠", color="azul",
+                    trend=t_vendas, trend_dir=d_vendas,
+                    sparkline_pts_data=spark_vendas),
+        kpi_card_v2(label_loc, str(total_loc),
+                    f"R${receita_loc:,.0f} em receita",
+                    icon="🔑", color="dourado",
+                    trend=t_loc, trend_dir=d_loc,
+                    sparkline_pts_data=spark_loc),
+        kpi_card_v2(label_leads, f"{total_leads:,}",
+                    f"vs {leads_ant:,} em {per_ant}",
+                    icon="📥", color="purple",
+                    trend=t_leads, trend_dir=d_leads,
+                    sparkline_pts_data=spark_leads),
+        kpi_card_v2("Taxa Conversao", f"{taxa_conv:.2f}%",
+                    f"vs {conv_ant:.2f}% anterior · meta 1,5%",
+                    icon="🎯", color=cor_conv,
+                    trend=t_conv, trend_dir=d_conv),
+    ]
+    st.markdown(render_kpi_grid(cards), unsafe_allow_html=True)
 
     # =========================================================
     # Charts

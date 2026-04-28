@@ -11,7 +11,7 @@ from utils.auth import escape
 # =========================================================
 # SPARKLINES (mini-graficos SVG)
 # =========================================================
-def sparkline_svg(pts: list[float], color: str = "azul", height: int = 32) -> str:
+def sparkline_svg(pts: list[float], color: str = "azul", height: int = 24) -> str:
     """Mini-grafico SVG inline pra dentro de KPI card."""
     if not pts or len(pts) < 2:
         return ""
@@ -104,35 +104,35 @@ def kpi_card_v2(label: str, valor: str, sub: str = "",
                 trend: str | None = None, trend_dir: str = "flat",
                 sparkline_pts_data: list[float] | None = None) -> str:
     """
-    Card KPI moderno com:
-    - Icone colorido no topo
-    - Trend arrow (↑23% / ↓5%) no canto
-    - Valor grande
-    - Subtitulo discreto
-    - Sparkline opcional (mini-grafico)
+    Card KPI moderno (em uma linha pra markdown nao quebrar).
     """
-    # Trend HTML
-    trend_html = ""
-    if trend:
-        trend_html = f'<span class="kpi-trend-v2 {trend_dir}">{escape(trend)}</span>'
-
-    # Sparkline HTML
+    trend_html = f'<span class="kpi-trend-v2 {trend_dir}">{escape(trend)}</span>' if trend else ""
     spark_html = ""
     if sparkline_pts_data and len(sparkline_pts_data) > 1:
         spark_html = sparkline_svg(sparkline_pts_data, color)
 
-    return f"""
-    <div class="kpi-card-v2 {color}">
-        <div class="kpi-top-v2">
-            <div class="kpi-icon-v2 {color}">{icon}</div>
-            {trend_html}
-        </div>
-        <div class="kpi-label-v2">{escape(label)}</div>
-        <div class="kpi-value-v2">{escape(valor)}</div>
-        <div class="kpi-sub-v2">{escape(sub)}</div>
-        {spark_html}
-    </div>
+    # IMPORTANTE: tudo em UMA LINHA pra markdown nao tratar como code block
+    return (
+        f'<div class="kpi-card-v2 {color}">'
+        f'<div class="kpi-top-v2">'
+        f'<div class="kpi-icon-v2 {color}">{icon}</div>'
+        f'{trend_html}'
+        f'</div>'
+        f'<div class="kpi-label-v2">{escape(label)}</div>'
+        f'<div class="kpi-value-v2">{escape(valor)}</div>'
+        f'<div class="kpi-sub-v2">{escape(sub)}</div>'
+        f'{spark_html}'
+        f'</div>'
+    )
+
+
+def render_kpi_grid(cards: list[str]) -> str:
     """
+    Constroi a grid completa em UMA UNICA STRING (pra emitir com 1 st.markdown).
+    Sem isso, Streamlit quebra a grid porque envolve cada st.markdown em um container.
+    """
+    cards_html = "".join(cards)
+    return f'<div class="kpi-grid-v2">{cards_html}</div>'
 
 
 # =========================================================

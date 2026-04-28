@@ -7,7 +7,7 @@ import plotly.express as px
 from utils.supabase_client import fetch_leads_jetimob
 from utils.auth import escape
 from utils.filtros import aplicar_filtro, aplicar_filtro_periodo_anterior, periodo_anterior
-from utils.components import kpi_card_v2, alert_box, calc_trend
+from utils.components import kpi_card_v2, alert_box, calc_trend, render_kpi_grid
 
 
 def render():
@@ -55,31 +55,24 @@ def render():
 
     cor_sem = "red" if total > 0 and sem_origem/total > 0.3 else "azul"
 
-    st.markdown('<div class="kpi-grid-v2">', unsafe_allow_html=True)
-    st.markdown(kpi_card_v2(
-        "Total de Leads", f"{total:,}",
-        f"vs {total_ant:,} em {per_ant}",
-        icon="📥", color="azul",
-        trend=t_total, trend_dir=d_total,
-    ), unsafe_allow_html=True)
-    st.markdown(kpi_card_v2(
-        "Com Origem", f"{com_origem:,}",
-        f"{com_origem/total*100:.1f}% do total" if total > 0 else "0%",
-        icon="✅", color="green",
-        trend=t_com, trend_dir=d_com,
-    ), unsafe_allow_html=True)
-    st.markdown(kpi_card_v2(
-        "Sem Rastreamento", f"{sem_origem:,}",
-        f"{sem_origem/total*100:.1f}% sem origem" if total > 0 else "0%",
-        icon="⚠️", color=cor_sem,
-    ), unsafe_allow_html=True)
-    st.markdown(kpi_card_v2(
-        "Canais Ativos", str(canais),
-        f"vs {canais_ant} em {per_ant}",
-        icon="📊", color="dourado",
-        trend=t_canais, trend_dir=d_canais,
-    ), unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+    cards = [
+        kpi_card_v2("Total de Leads", f"{total:,}",
+                    f"vs {total_ant:,} em {per_ant}",
+                    icon="📥", color="azul",
+                    trend=t_total, trend_dir=d_total),
+        kpi_card_v2("Com Origem", f"{com_origem:,}",
+                    f"{com_origem/total*100:.1f}% do total" if total > 0 else "0%",
+                    icon="✅", color="green",
+                    trend=t_com, trend_dir=d_com),
+        kpi_card_v2("Sem Rastreamento", f"{sem_origem:,}",
+                    f"{sem_origem/total*100:.1f}% sem origem" if total > 0 else "0%",
+                    icon="⚠️", color=cor_sem),
+        kpi_card_v2("Canais Ativos", str(canais),
+                    f"vs {canais_ant} em {per_ant}",
+                    icon="📊", color="dourado",
+                    trend=t_canais, trend_dir=d_canais),
+    ]
+    st.markdown(render_kpi_grid(cards), unsafe_allow_html=True)
 
     df_origem = df[df["origem"].notna() & (df["origem"] != "")]
 
