@@ -21,6 +21,7 @@ from utils.filtros import aplicar_filtro
 from utils.supabase_client import (
     get_supabase_client, fetch_leads_jetimob, fetch_vendas
 )
+from utils.charts import nl_theme
 
 
 _MESES_PT = {
@@ -295,8 +296,10 @@ def render():
                      color_discrete_sequence=["#033677"],
                      labels={"mes": "", "valor_reais": "VGV (R$)"},
                      text=vendas_hist["qtd_ganhas"].apply(lambda n: f"{n} vendas"))
-        fig.update_traces(textposition="outside")
-        fig.update_layout(height=360, margin=dict(l=0, r=0, t=30, b=0), showlegend=False)
+        fig.update_traces(textposition="outside", marker_line_width=0,
+                          marker_color="#033677")
+        nl_theme(fig, height=360)
+        fig.update_layout(showlegend=False)
         st.plotly_chart(fig, use_container_width=True)
 
     # =========================================================

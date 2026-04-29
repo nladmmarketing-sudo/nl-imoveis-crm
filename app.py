@@ -110,135 +110,252 @@ st.markdown(f"""
 </style>
 """, unsafe_allow_html=True)
 
-# CSS de componentes (string normal, mantem o layout original)
+# CSS v2.0 — NL Imoveis Design System
 st.markdown("""
 <style>
-    /* Header */
+    /* ═══════════════════════════════════════════════════
+       LAYOUT BASE
+    ═══════════════════════════════════════════════════ */
+    .main .block-container { padding-top: 1.2rem; max-width: 1240px; }
+
+    /* ═══════════════════════════════════════════════════
+       HEADER v2.0 — gradiente profundo com reflexo ouro
+    ═══════════════════════════════════════════════════ */
     .nl-header {
-        background: linear-gradient(135deg, #033677 0%, #022757 60%, #001833 100%);
-        padding: 2rem 2.5rem;
-        border-radius: 16px;
-        margin-bottom: 1.5rem;
+        background: linear-gradient(140deg, #033677 0%, #012B61 55%, #001833 100%);
+        padding: 2rem 2.5rem 2rem 2.5rem;
+        border-radius: 20px;
+        margin-bottom: 1.75rem;
         color: white;
         position: relative;
         overflow: hidden;
+        box-shadow: 0 8px 32px rgba(3,54,119,0.28), 0 2px 8px rgba(3,54,119,0.15);
     }
+    /* Circulo decorativo superior-direito */
+    .nl-header::before {
+        content: '';
+        position: absolute;
+        top: -80px; right: -80px;
+        width: 280px; height: 280px;
+        background: radial-gradient(circle, rgba(255,183,0,0.12) 0%, transparent 70%);
+        border-radius: 50%;
+        pointer-events: none;
+    }
+    /* Linha dourada na base */
     .nl-header::after {
         content: '';
         position: absolute;
-        top: -50%;
-        right: -10%;
-        width: 300px;
-        height: 300px;
-        background: rgba(240,165,0,0.08);
-        border-radius: 50%;
+        bottom: 0; left: 2.5rem; right: 2.5rem;
+        height: 2px;
+        background: linear-gradient(90deg, var(--dourado) 0%, transparent 100%);
+        opacity: 0.4;
+        pointer-events: none;
     }
     .nl-header .badge {
         display: inline-block;
-        background: var(--dourado);
+        background: linear-gradient(90deg, var(--dourado) 0%, #FFD040 100%);
         color: var(--azul);
-        padding: 0.25rem 0.8rem;
+        padding: 0.22rem 0.85rem;
         border-radius: 50px;
-        font-size: 0.7rem;
-        font-weight: 700;
-        letter-spacing: 1px;
+        font-size: 0.68rem;
+        font-weight: 800;
+        letter-spacing: 1.2px;
         text-transform: uppercase;
-        margin-bottom: 0.8rem;
+        margin-bottom: 0.85rem;
+        box-shadow: 0 2px 8px rgba(255,183,0,0.35);
     }
-    .nl-header h1 { color: white; margin: 0; font-size: 2rem; font-weight: 800; }
+    .nl-header h1 {
+        color: white;
+        margin: 0;
+        font-size: 2.1rem;
+        font-weight: 800;
+        line-height: 1.1;
+        letter-spacing: -0.5px;
+    }
     .nl-header h1 span { color: var(--dourado); }
-    .nl-header .sub { color: rgba(255,255,255,0.65); font-size: 0.9rem; margin-top: 0.3rem; }
+    .nl-header .sub {
+        color: rgba(255,255,255,0.6);
+        font-size: 0.88rem;
+        margin-top: 0.45rem;
+    }
+    .nl-header .sub strong { color: rgba(255,255,255,0.9); }
 
-    /* KPI Cards */
-    .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
+    /* ═══════════════════════════════════════════════════
+       KPI CARDS v2.0 — glassmorphism suave + acento gradiente
+    ═══════════════════════════════════════════════════ */
+    .kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1rem;
+        margin-bottom: 1.75rem;
+    }
     .kpi-card {
-        background: white;
-        border-radius: 14px;
-        padding: 1.3rem 1.5rem;
-        box-shadow: 0 2px 12px rgba(28,56,130,0.08);
-        border: 1px solid var(--border);
+        background: linear-gradient(145deg, #ffffff 0%, #f7faff 100%);
+        border-radius: 18px;
+        padding: 1.4rem 1.5rem 1.3rem 1.5rem;
+        box-shadow: 0 4px 20px rgba(3,54,119,0.09), 0 1px 4px rgba(3,54,119,0.06);
+        border: 1px solid rgba(209,228,245,0.7);
         position: relative;
         overflow: hidden;
+        transition: transform 0.18s ease, box-shadow 0.18s ease;
     }
-    .kpi-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: var(--dourado); }
-    .kpi-card.azul::before { background: var(--azul); }
-    .kpi-card.green::before { background: var(--green); }
-    .kpi-card.red::before { background: var(--red); }
+    .kpi-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 28px rgba(3,54,119,0.15), 0 2px 8px rgba(3,54,119,0.08);
+    }
+    /* Acento top — cor por tipo */
+    .kpi-card::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, var(--dourado) 0%, #FFD040 100%);
+        border-radius: 18px 18px 0 0;
+    }
+    .kpi-card.azul::before {
+        background: linear-gradient(90deg, #033677 0%, #2678BC 100%);
+    }
+    .kpi-card.green::before {
+        background: linear-gradient(90deg, #16A34A 0%, #22C55E 100%);
+    }
+    .kpi-card.red::before {
+        background: linear-gradient(90deg, #DC2626 0%, #EF4444 100%);
+    }
+    /* Circulo decorativo canto direito */
+    .kpi-card::after {
+        content: '';
+        position: absolute;
+        bottom: -20px; right: -20px;
+        width: 80px; height: 80px;
+        background: rgba(3,54,119,0.04);
+        border-radius: 50%;
+        pointer-events: none;
+    }
     .kpi-card .label {
-        font-size: 0.72rem;
+        font-size: 0.69rem;
         text-transform: uppercase;
-        letter-spacing: 0.8px;
-        color: var(--gray);
-        font-weight: 600;
+        letter-spacing: 0.9px;
+        color: #6B7280;
+        font-weight: 700;
     }
     .kpi-card .num {
-        font-size: 2rem;
+        font-size: 2.1rem;
         font-weight: 800;
         color: var(--azul);
         line-height: 1;
-        margin: 0.4rem 0;
+        margin: 0.5rem 0 0.3rem;
+        letter-spacing: -1px;
     }
-    .kpi-card .sub { font-size: 0.78rem; color: var(--gray); }
+    .kpi-card .sub { font-size: 0.76rem; color: #9CA3AF; }
+    .kpi-card .num.highlight { color: var(--dourado); }
+
+    /* Badges semânticos */
     .kpi-badge {
         display: inline-block;
-        padding: 0.2rem 0.6rem;
+        padding: 0.18rem 0.6rem;
         border-radius: 50px;
-        font-size: 0.68rem;
+        font-size: 0.66rem;
         font-weight: 700;
-        margin-top: 0.4rem;
+        margin-top: 0.5rem;
+        letter-spacing: 0.3px;
     }
-    .badge-red { background: #FEE2E2; color: #DC2626; }         /* semantico erro */
-    .badge-green { background: #DCFCE7; color: #16A34A; }       /* semantico sucesso */
-    .badge-orange { background: #FFE4C7; color: #9B5400; }      /* Terra Fertil */
-    .badge-blue { background: #DBEAFE; color: #033677; }        /* Azul Noturno */
-    .badge-gold { background: #FFDE76; color: #9B5400; }        /* Sol Dourado + Terra Fertil */
+    .badge-red    { background: #FEE2E2; color: #DC2626; }
+    .badge-green  { background: #DCFCE7; color: #16A34A; }
+    .badge-orange { background: #FFE4C7; color: #9B5400; }
+    .badge-blue   { background: #DBEAFE; color: #033677; }
+    .badge-gold   { background: #FFF3C4; color: #9B5400; }
 
-    /* Section headers */
+    /* ═══════════════════════════════════════════════════
+       SECTION HEADERS v2.0
+    ═══════════════════════════════════════════════════ */
     .section-hdr {
         display: flex;
         align-items: center;
-        gap: 0.8rem;
-        margin: 2rem 0 1.2rem 0;
+        gap: 0.9rem;
+        margin: 2.2rem 0 1.2rem;
+        padding-bottom: 0.75rem;
+        border-bottom: 2px solid var(--nl-ceu-claro);
     }
     .section-icon {
-        width: 40px;
-        height: 40px;
-        background: var(--azul);
-        border-radius: 10px;
+        width: 42px; height: 42px;
+        background: linear-gradient(135deg, var(--azul) 0%, #2678BC 100%);
+        border-radius: 12px;
         display: flex;
         align-items: center;
         justify-content: center;
         font-size: 1.2rem;
         flex-shrink: 0;
+        box-shadow: 0 4px 12px rgba(3,54,119,0.25);
     }
-    .section-hdr h2 { font-size: 1.4rem; font-weight: 800; color: var(--azul); margin: 0; }
-    .section-hdr p { font-size: 0.82rem; color: var(--gray); margin: 0.15rem 0 0 0; }
+    .section-hdr h2 {
+        font-size: 1.35rem;
+        font-weight: 800;
+        color: var(--azul);
+        margin: 0;
+        letter-spacing: -0.3px;
+    }
+    .section-hdr p { font-size: 0.8rem; color: #9CA3AF; margin: 0.12rem 0 0; }
 
-    /* Ranking */
+    /* ═══════════════════════════════════════════════════
+       RANKING v2.0 — faixa com acento esquerdo
+    ═══════════════════════════════════════════════════ */
     .ranking-item {
         display: flex;
         align-items: center;
         gap: 1rem;
-        padding: 0.75rem 1rem;
-        border-radius: 10px;
-        background: var(--bg);
-        margin: 0.4rem 0;
+        padding: 0.85rem 1rem;
+        border-radius: 12px;
+        background: linear-gradient(145deg, #f7faff 0%, #f0f5fc 100%);
+        margin: 0.45rem 0;
+        border: 1px solid rgba(209,228,245,0.6);
+        border-left: 3px solid var(--border);
+        transition: border-left-color 0.15s;
     }
     .rank-num {
-        width: 28px; height: 28px;
+        width: 30px; height: 30px;
         border-radius: 50%;
         display: flex; align-items: center; justify-content: center;
-        font-weight: 800; font-size: 0.85rem; flex-shrink: 0;
+        font-weight: 800; font-size: 0.82rem; flex-shrink: 0;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.15);
     }
-    .rank-1 { background: var(--dourado); color: var(--azul); }
-    .rank-2 { background: #C0C0C0; color: #333; }
-    .rank-3 { background: #CD7F32; color: #fff; }
-    .rank-other { background: var(--border); color: var(--gray); }
-    .rank-name { font-weight: 700; font-size: 0.88rem; color: var(--azul); }
-    .rank-sub { font-size: 0.72rem; color: var(--gray); }
-    .rank-value { text-align: right; font-weight: 800; font-size: 0.95rem; color: var(--azul); }
+    .rank-1 { background: linear-gradient(135deg, #FFB700 0%, #FFD040 100%); color: #033677; }
+    .rank-2 { background: linear-gradient(135deg, #9CA3AF 0%, #D1D5DB 100%); color: #1F2937; }
+    .rank-3 { background: linear-gradient(135deg, #CD7F32 0%, #E09B50 100%); color: white; }
+    .rank-other { background: #E5E7EB; color: #6B7280; box-shadow: none; }
+    .rank-name { font-weight: 700; font-size: 0.88rem; color: #033677; }
+    .rank-sub  { font-size: 0.72rem; color: #9CA3AF; margin-top: 1px; }
+    .rank-value {
+        text-align: right;
+        font-weight: 800;
+        font-size: 0.95rem;
+        color: #033677;
+        margin-left: auto;
+        white-space: nowrap;
+    }
 
-    /* Funil */
+    /* ═══════════════════════════════════════════════════
+       CHART BOXES v2.0
+    ═══════════════════════════════════════════════════ */
+    .chart-box {
+        background: white;
+        border-radius: 18px;
+        padding: 1.5rem;
+        box-shadow: 0 4px 20px rgba(3,54,119,0.08), 0 1px 4px rgba(3,54,119,0.05);
+        border: 1px solid rgba(209,228,245,0.7);
+        margin-bottom: 1rem;
+    }
+    .chart-box h3 {
+        font-size: 1rem;
+        font-weight: 700;
+        color: #033677;
+        margin: 0 0 1rem;
+        padding-bottom: 0.6rem;
+        border-bottom: 1px solid var(--nl-ceu-claro);
+    }
+
+    /* ═══════════════════════════════════════════════════
+       FUNIL
+    ═══════════════════════════════════════════════════ */
     .funil-step {
         display: grid;
         grid-template-columns: 120px 55px 1fr 50px;
@@ -253,7 +370,9 @@ st.markdown("""
     .funil-pct { font-size: 0.75rem; font-weight: 700; text-align: right; }
     .funil-drop { font-size: 0.7rem; font-weight: 600; padding: 0.1rem 0 0.1rem 175px; }
 
-    /* Alert */
+    /* ═══════════════════════════════════════════════════
+       ALERT / NL-ALERT
+    ═══════════════════════════════════════════════════ */
     .nl-alert {
         border-radius: 12px;
         padding: 1rem 1.2rem;
@@ -262,93 +381,138 @@ st.markdown("""
         align-items: flex-start;
         margin: 0.75rem 0;
     }
-    .alert-red { background: #FEE2E2; border-left: 4px solid #DC2626; }
-    .alert-orange { background: #FFE4C7; border-left: 4px solid #9B5400; }   /* Terra Fertil */
-    .alert-green { background: #DCFCE7; border-left: 4px solid #16A34A; }
-    .alert-blue { background: #DBEAFE; border-left: 4px solid #033677; }     /* Azul Noturno */
-    .alert-gold { background: #FFDE76; border-left: 4px solid #FFB700; }     /* Sol Dourado + Ouro Vivo */
+    .alert-red    { background: #FEF2F2; border-left: 4px solid #DC2626; }
+    .alert-orange { background: #FFF7ED; border-left: 4px solid #EA580C; }
+    .alert-green  { background: #F0FDF4; border-left: 4px solid #16A34A; }
+    .alert-blue   { background: #EFF6FF; border-left: 4px solid #033677; }
+    .alert-gold   { background: #FFFBEB; border-left: 4px solid #FFB700; }
 
-    /* Chart box */
-    .chart-box {
-        background: white;
-        border-radius: 14px;
-        padding: 1.5rem;
-        box-shadow: 0 2px 12px rgba(28,56,130,0.08);
-        border: 1px solid var(--border);
-    }
-    .chart-box h3 { font-size: 1rem; font-weight: 700; color: var(--azul); margin-bottom: 0.5rem; }
-
-    /* Footer */
+    /* ═══════════════════════════════════════════════════
+       FOOTER v2.0
+    ═══════════════════════════════════════════════════ */
     .nl-footer {
-        background: var(--azul);
-        color: rgba(255,255,255,0.6);
+        background: linear-gradient(135deg, #033677 0%, #001833 100%);
+        color: rgba(255,255,255,0.5);
         text-align: center;
-        padding: 1.5rem;
-        border-radius: 14px;
+        padding: 1.5rem 2rem;
+        border-radius: 18px;
         margin-top: 2rem;
-        font-size: 0.8rem;
+        font-size: 0.78rem;
+        border-top: 2px solid rgba(255,183,0,0.25);
     }
     .nl-footer strong { color: var(--dourado); }
 
-    /* Sidebar */
+    /* ═══════════════════════════════════════════════════
+       SIDEBAR v2.0 — azul profundo com detalhe dourado
+    ═══════════════════════════════════════════════════ */
     [data-testid="stSidebar"] {
-        background: var(--nl-azul-noturno);
-        border-right: 3px solid var(--nl-ouro-vivo);
+        background: linear-gradient(180deg, #033677 0%, #022560 60%, #001833 100%);
+        border-right: 2px solid rgba(255,183,0,0.35);
     }
-    [data-testid="stSidebar"] * { color: white !important; }
-    [data-testid="stSidebar"] hr { border-color: rgba(255,255,255,0.15); }
+    [data-testid="stSidebar"] * { color: rgba(255,255,255,0.92) !important; }
+    [data-testid="stSidebar"] hr { border-color: rgba(255,255,255,0.12); margin: 0.5rem 0; }
+    /* Selectbox e radio: highlight mais claro */
+    [data-testid="stSidebar"] [data-baseweb="select"] > div {
+        background: rgba(255,255,255,0.08) !important;
+        border-color: rgba(255,255,255,0.2) !important;
+    }
+    [data-testid="stSidebar"] label[data-baseweb="radio"] {
+        padding: 0.35rem 0.5rem;
+        border-radius: 8px;
+        margin: 1px 0;
+        transition: background 0.15s;
+    }
 
-    /* Hide streamlit chrome */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
-
-    /* Esconde apenas o menu automatico (seguro, nao afeta outros elementos) */
-    [data-testid="stSidebarNav"] { display: none !important; }
-
-    /* Botoes - padrao NL */
+    /* ═══════════════════════════════════════════════════
+       BOTOES v2.0
+    ═══════════════════════════════════════════════════ */
     .stButton > button[kind="primary"] {
-        background-color: var(--nl-ouro-vivo) !important;
-        color: var(--nl-azul-noturno) !important;
+        background: linear-gradient(90deg, #FFB700 0%, #FFD040 100%) !important;
+        color: #033677 !important;
         border: none !important;
-        font-weight: 700 !important;
+        font-weight: 800 !important;
         letter-spacing: 0.3px;
+        box-shadow: 0 3px 10px rgba(255,183,0,0.35) !important;
+        border-radius: 10px !important;
     }
     .stButton > button[kind="primary"]:hover {
-        background-color: var(--nl-sol-dourado) !important;
-        color: var(--nl-azul-noturno) !important;
-        border: none !important;
+        background: linear-gradient(90deg, #FFD040 0%, #FFE066 100%) !important;
+        box-shadow: 0 5px 16px rgba(255,183,0,0.45) !important;
+        transform: translateY(-1px);
     }
     .stButton > button[kind="secondary"] {
-        background-color: transparent !important;
-        color: var(--nl-azul-noturno) !important;
-        border: 1.5px solid var(--nl-azul-noturno) !important;
-        font-weight: 600 !important;
+        background: transparent !important;
+        color: #033677 !important;
+        border: 1.5px solid #033677 !important;
+        font-weight: 700 !important;
+        border-radius: 10px !important;
     }
     .stButton > button[kind="secondary"]:hover {
-        background-color: var(--nl-ceu-claro) !important;
-        color: var(--nl-azul-noturno) !important;
-        border-color: var(--nl-azul-noturno) !important;
+        background: #F0F6FF !important;
+        border-color: #033677 !important;
     }
 
-    /* Override: sidebar escura — primario mantem texto azul, secundario fica outline branco */
+    /* Sidebar botoes */
+    [data-testid="stSidebar"] .stButton > button {
+        border-radius: 10px !important;
+    }
     [data-testid="stSidebar"] .stButton > button[kind="primary"] {
-        color: var(--nl-azul-noturno) !important;
+        color: #033677 !important;
     }
     [data-testid="stSidebar"] .stButton > button[kind="secondary"] {
-        color: white !important;
-        border-color: rgba(255,255,255,0.4) !important;
+        color: rgba(255,255,255,0.85) !important;
+        border-color: rgba(255,255,255,0.3) !important;
     }
     [data-testid="stSidebar"] .stButton > button[kind="secondary"]:hover {
-        background-color: rgba(255,255,255,0.08) !important;
-        color: white !important;
+        background: rgba(255,255,255,0.1) !important;
     }
 
-    /* KPI: numero destacavel em Ouro Vivo (opt-in com .highlight) */
-    .kpi-card .num.highlight { color: var(--nl-ouro-vivo); }
+    /* ═══════════════════════════════════════════════════
+       STREAMLIT NATIVE OVERRIDES
+    ═══════════════════════════════════════════════════ */
+    /* Dataframe / tabelas */
+    [data-testid="stDataFrame"] { border-radius: 12px; overflow: hidden; }
 
+    /* Inputs */
+    [data-testid="stTextInput"] input {
+        border-radius: 10px !important;
+        border-color: rgba(209,228,245,0.8) !important;
+    }
+
+    /* Info / Warning / Success / Error nativo */
+    [data-testid="stAlert"] {
+        border-radius: 12px !important;
+        border: none !important;
+    }
+
+    /* Tabs (se usadas) */
+    [data-baseweb="tab-list"] { gap: 4px; }
+    [data-baseweb="tab"] {
+        border-radius: 8px !important;
+        font-weight: 600 !important;
+    }
+
+    /* Download button */
+    [data-testid="stDownloadButton"] button {
+        border-radius: 10px !important;
+        font-weight: 700 !important;
+    }
+
+    /* ═══════════════════════════════════════════════════
+       ESCONDE CHROME STREAMLIT
+    ═══════════════════════════════════════════════════ */
+    #MainMenu { visibility: hidden; }
+    footer { visibility: hidden; }
+    header { visibility: hidden; }
+    [data-testid="stSidebarNav"] { display: none !important; }
+
+    /* ═══════════════════════════════════════════════════
+       RESPONSIVO
+    ═══════════════════════════════════════════════════ */
     @media(max-width: 768px) {
-        .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+        .kpi-grid { grid-template-columns: repeat(2, 1fr); gap: 0.75rem; }
+        .nl-header { padding: 1.5rem; }
+        .nl-header h1 { font-size: 1.6rem; }
         .funil-step { grid-template-columns: 90px 45px 1fr 40px; }
     }
 </style>
@@ -423,8 +587,8 @@ def main():
             st.rerun()
 
         st.markdown("---")
-        st.caption("Painel Estrategico v1.2")
-        st.caption("Cache: 5 min · Supabase + Jetimob")
+        st.caption("Painel Estrategico v2.0")
+        st.caption("🔄 Cache 5 min · Supabase + Jetimob")
 
     if pagina == "Visao Geral":
         from views import visao_geral

@@ -7,6 +7,7 @@ import plotly.express as px
 from utils.supabase_client import fetch_leads_jetimob, fetch_vendas
 from utils.auth import escape, is_admin, is_corretor, filtrar_por_perfil, get_usuario_atual, pode_ver_tudo
 from utils.filtros import aplicar_filtro
+from utils.charts import nl_theme, NL_COLORS
 
 
 def render():
@@ -94,12 +95,11 @@ def render():
             df_leads_copy["data"] = pd.to_datetime(df_leads_copy["created_at"], errors="coerce").dt.date
             timeline = df_leads_copy.dropna(subset=["data"]).groupby("data").size().reset_index(name="Leads")
             if not timeline.empty:
-                fig = px.area(timeline, x="data", y="Leads", color_discrete_sequence=["#033677"])
-                fig.update_layout(
-                    height=320, margin=dict(l=0, r=0, t=10, b=0),
-                    plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-                    xaxis_title="", yaxis_title="Novos Leads"
-                )
+                fig = px.area(timeline, x="data", y="Leads",
+                              color_discrete_sequence=["#033677"],
+                              labels={"data": "", "Leads": "Novos Leads"})
+                fig.update_traces(fillcolor="rgba(3,54,119,0.08)", line_width=2)
+                nl_theme(fig, height=320)
                 st.plotly_chart(fig, use_container_width=True)
             else:
                 st.info("Sem dados no periodo.")
@@ -114,12 +114,10 @@ def render():
             if not origem_data.empty:
                 oc = origem_data["origem"].value_counts().head(10).reset_index()
                 oc.columns = ["Origem", "Leads"]
-                fig2 = px.bar(oc, x="Leads", y="Origem", orientation="h", color_discrete_sequence=["#FFB700"])
-                fig2.update_layout(
-                    height=320, margin=dict(l=0, r=0, t=10, b=0),
-                    yaxis=dict(autorange="reversed"),
-                    plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)"
-                )
+                fig2 = px.bar(oc, x="Leads", y="Origem", orientation="h",
+                              color_discrete_sequence=["#FFB700"])
+                fig2.update_layout(yaxis=dict(autorange="reversed"))
+                nl_theme(fig2, height=320)
                 st.plotly_chart(fig2, use_container_width=True)
             else:
                 st.info("Leads sem origem registrada.")

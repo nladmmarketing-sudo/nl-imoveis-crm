@@ -7,6 +7,7 @@ import plotly.express as px
 from utils.supabase_client import fetch_leads_jetimob
 from utils.auth import escape, filtrar_por_perfil, get_usuario_atual
 from utils.filtros import aplicar_filtro
+from utils.charts import nl_theme, NL_COLORS
 
 
 def render():
@@ -72,11 +73,10 @@ def render():
         if not df_origem.empty:
             oc = df_origem["origem"].value_counts().head(12).reset_index()
             oc.columns = ["Origem", "Leads"]
-            fig = px.pie(oc, values="Leads", names="Origem", hole=0.4,
-                         color_discrete_sequence=["#033677", "#FFB700", "#2678BC", "#FFDE76",
-                                                  "#16A34A", "#DC2626", "#EA580C", "#8B5CF6",
-                                                  "#06B6D4", "#D1E4F5", "#9CA3AF", "#CD7F32"])
-            fig.update_layout(height=400, margin=dict(l=0, r=0, t=10, b=0))
+            fig = px.pie(oc, values="Leads", names="Origem", hole=0.45,
+                         color_discrete_sequence=NL_COLORS)
+            nl_theme(fig, height=400)
+            fig.update_traces(textposition="inside", textinfo="percent+label")
             st.plotly_chart(fig, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
@@ -89,12 +89,9 @@ def render():
             fig2 = px.bar(oc2, x="Leads", y="Origem", orientation="h",
                           text=oc2.apply(lambda r: f"{r['Leads']:,} ({r['pct']}%)", axis=1),
                           color_discrete_sequence=["#033677"])
-            fig2.update_layout(
-                height=400, margin=dict(l=0, r=0, t=10, b=0),
-                yaxis=dict(autorange="reversed"),
-                plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)"
-            )
-            fig2.update_traces(textposition="outside")
+            fig2.update_layout(yaxis=dict(autorange="reversed"))
+            fig2.update_traces(textposition="outside", marker_line_width=0)
+            nl_theme(fig2, height=400)
             st.plotly_chart(fig2, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
@@ -142,12 +139,8 @@ def render():
         if not df_top5.empty:
             monthly = df_top5.groupby(["mes", "origem"]).size().reset_index(name="Leads")
             fig3 = px.line(monthly, x="mes", y="Leads", color="origem",
-                           color_discrete_sequence=["#033677", "#FFB700", "#16A34A", "#DC2626", "#8B5CF6"])
-            fig3.update_layout(
-                height=350, margin=dict(l=0, r=0, t=10, b=0),
-                xaxis_title="", yaxis_title="Leads",
-                plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-                legend_title=""
-            )
+                           color_discrete_sequence=NL_COLORS[:5])
+            nl_theme(fig3, height=350)
+            fig3.update_layout(legend_title="", yaxis_title="Leads")
             st.plotly_chart(fig3, use_container_width=True)
     st.markdown('</div>', unsafe_allow_html=True)
