@@ -65,7 +65,26 @@ def _resolver_mes_do_periodo(periodo: str) -> tuple[int, int, str]:
         primeiro = date(hoje.year, hoje.month, 1)
         ultimo_anterior = primeiro - pd.Timedelta(days=1)
         return ultimo_anterior.year, ultimo_anterior.month, f"{_MESES_PT[ultimo_anterior.month]}/{ultimo_anterior.year}"
+    # "Ano XXXX" → retorna dezembro do ano passado ou mes atual do ano corrente
+    if periodo and periodo.startswith("Ano "):
+        try:
+            ano = int(periodo.replace("Ano ", "").strip())
+            if ano < hoje.year:
+                return ano, 12, f"Dezembro/{ano}"
+            return hoje.year, hoje.month, f"{_MESES_PT[hoje.month]}/{hoje.year}"
+        except ValueError:
+            pass
     return hoje.year, hoje.month, f"{_MESES_PT[hoje.month]}/{hoje.year}"
+
+
+def _is_periodo_ano(periodo: str) -> int | None:
+    """Retorna o ano se o periodo for 'Ano XXXX', None caso contrario."""
+    if periodo and periodo.startswith("Ano "):
+        try:
+            return int(periodo.replace("Ano ", "").strip())
+        except ValueError:
+            pass
+    return None
 
 
 def render():
@@ -78,14 +97,18 @@ def render():
         st.stop()
 
     periodo = st.session_state.get("periodo_global", "Este mes")
+    ano_selecionado = _is_periodo_ano(periodo)  # int se "Ano XXXX", None caso contrario
     ano_ref, mes_ref, mes_label = _resolver_mes_do_periodo(periodo)
     mes_atual_date = date(ano_ref, mes_ref, 1)
+
+    # Label de cabecalho dinâmico
+    label_periodo_hdr = f"Ano {ano_selecionado}" if ano_selecionado else mes_label
 
     st.markdown(f"""
     <div class="nl-header">
         <div class="badge">Equipe de Vendas</div>
         <h1>Performance <span>Vendas</span></h1>
-        <div class="sub">Dados oficiais Jetimob · Periodo: <strong>{escape(mes_label)}</strong></div>
+        <div class="sub">Dados oficiais Jetimob · Periodo: <strong>{escape(label_periodo_hdr)}</strong></div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -100,12 +123,50 @@ def render():
     # =========================================================
     # KPIs (fonte oficial Jetimob — quando disponivel)
     # =========================================================
+
     if not df_resumo.empty:
+        # Adiciona coluna de ano para facilitar filtragem
+        df_resumo["_ano"] = df_resumo["mes_referencia"].apply(lambda d: d.year)
+
+    if ano_selecionado and not df_resumo.empty:
+        # MODO ANO: agrega todos os meses do ano selecionado
+        resumo_ano = df_resumo[(df_resumo["_ano"] == ano_selecionado) & (df_resumo["tipo"] == "venda")]
+        qtd_vendas_oficial = int(resumo_ano["qtd_ganhas"].sum())
+        vgv_oficial = float(resumo_ano["valor_reais"].sum())
+        # Agrega ranking do ano (soma por corretor)
+        ranking_anual = {}
+        for _, row in resumo_ano.iterrows():
+            rk = row.get("ranking_json", []) or []
+            if isinstance(rk, list):
+                for r in rk:
+                    nome = r.get("nome", "?")
+                    if nome not in ranking_anual:
+                        ranking_anual[nome] = {"nome": nome, "qtd": 0, "valor_cents": 0}
+                    ranking_anual[nome]["qtd"] += int(r.get("qtd", 0) or 0)
+                    ranking_anual[nome]["valor_cents"] += int(r.get("valor_cents", 0) or 0)
+        ranking_oficial = sorted(ranking_anual.values(), key=lambda r: r["valor_cents"], reverse=True)
+        if not resumo_ano.empty:
+            meses_disp = resumo_ano["mes_referencia"].apply(
+                lambda d: f"{_MESES_PT[d.month][:3]}/{str(d.year)[-2:]}").tolist()
+            st.info(f"📅 Exibindo agregado anual do **Ano {ano_selecionado}** "
+                    f"({len(resumo_ano)} meses com dados: {', '.join(meses_disp)}). "
+                    f"Para ver um mês específico, selecione o mês no filtro.")
+        else:
+            st.warning(f"⚠️ Sem dados oficiais para o Ano {ano_selecionado}. "
+                       f"O sync cobre a partir de Outubro/2025.")
+    elif not df_resumo.empty:
+        # MODO MES
         resumo_mes = df_resumo[(df_resumo["mes_referencia"] == mes_atual_date)
                                 & (df_resumo["tipo"] == "venda")]
         qtd_vendas_oficial = int(resumo_mes["qtd_ganhas"].iloc[0]) if not resumo_mes.empty else 0
         vgv_oficial = float(resumo_mes["valor_reais"].iloc[0]) if not resumo_mes.empty else 0.0
         ranking_oficial = (resumo_mes["ranking_json"].iloc[0] if not resumo_mes.empty else []) or []
+        # Avisa quando nao ha dados para o mes selecionado
+        if resumo_mes.empty and "/" in periodo:
+            mes_inicio_sync = "Outubro/2025"
+            st.warning(f"⚠️ Sem dados oficiais Jetimob para **{mes_label}**. "
+                       f"O sync cobre a partir de {mes_inicio_sync}. "
+                       f"Para períodos anteriores, os KPIs de vendas mostrarão zero.")
     else:
         qtd_vendas_oficial = 0
         vgv_oficial = 0.0
@@ -129,7 +190,7 @@ def render():
         <div class="kpi-card green">
             <div class="label">VGV do Periodo</div>
             <div class="num" style="color:#16A34A">{_fmt_brl(vgv_oficial)}</div>
-            <div class="sub">{escape(mes_label)} · Oficial Jetimob</div>
+            <div class="sub">{escape(label_periodo_hdr)} · Oficial Jetimob</div>
         </div>
         <div class="kpi-card azul">
             <div class="label">Vendas Fechadas</div>
@@ -208,9 +269,9 @@ def render():
                 )
             st.markdown("\n".join(linhas), unsafe_allow_html=True)
         else:
-            st.info(f"Nenhuma venda registrada em {mes_label}.")
+            st.info(f"Nenhuma venda registrada em {label_periodo_hdr}.")
     else:
-        st.info(f"Nenhuma venda registrada em {mes_label}.")
+        st.info(f"Nenhuma venda registrada em {label_periodo_hdr}.")
 
     # =========================================================
     # Evolucao mensal — VGV oficial
@@ -257,7 +318,7 @@ def render():
             df_v = df_v[df_v["tipo_negocio"] == "venda"]
 
         if df_v.empty:
-            st.info(f"Sem vendas em {mes_label}.")
+            st.info(f"Sem vendas em {label_periodo_hdr}.")
         else:
             cols = ["data_venda", "nome_cliente", "tipo_imovel", "codigo_imovel",
                     "bairro", "valor", "corretor", "origem_lead"]

@@ -5,11 +5,16 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from utils.supabase_client import fetch_leads_jetimob
-from utils.auth import escape
+from utils.auth import escape, filtrar_por_perfil, get_usuario_atual
 from utils.filtros import aplicar_filtro
 
 
 def render():
+    user = get_usuario_atual()
+    if not user:
+        st.warning("Sessao expirada. Faca login novamente.")
+        st.stop()
+
     periodo = st.session_state.get("periodo_global", "Ultimos 30 dias")
 
     st.markdown(f"""
@@ -20,7 +25,8 @@ def render():
     </div>
     """, unsafe_allow_html=True)
 
-    df_all = fetch_leads_jetimob()
+    # Aplica filtro RBAC antes de qualquer agregacao
+    df_all = filtrar_por_perfil(fetch_leads_jetimob(), "corretor")
     df = aplicar_filtro(df_all, periodo, "created_at")
 
     if df.empty:

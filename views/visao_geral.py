@@ -43,6 +43,15 @@ def render():
     ticket_medio = vgv / total_vendas if total_vendas > 0 else 0
     taxa_conversao = (total_vendas / total_leads * 100) if total_leads > 0 else 0
 
+    # Aviso para periodos sem cobertura de dados
+    _periodos_sem_dados = ["Janeiro/2025","Fevereiro/2025","Marco/2025","Abril/2025",
+                           "Maio/2025","Junho/2025","Julho/2025"]
+    if periodo in _periodos_sem_dados:
+        st.warning(
+            f"⚠️ Sem dados para **{escape(periodo)}**. "
+            f"O webhook do Jetimob foi ativado em Agosto/2025 — dados disponíveis a partir dessa data."
+        )
+
     # Labels dinamicos: corretor ve "Meu/Minhas", outros perfis ve agregado
     label_leads = "Meus Leads" if is_corretor() else "Total de Leads"
     label_negocios = "Minhas Vendas" if is_corretor() else "Negocios Fechados"

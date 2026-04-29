@@ -74,7 +74,26 @@ def _resolver_mes_do_periodo(periodo: str) -> tuple[int, int, str]:
         primeiro = date(hoje.year, hoje.month, 1)
         ultimo_anterior = primeiro - pd.Timedelta(days=1)
         return ultimo_anterior.year, ultimo_anterior.month, f"{_MESES_PT[ultimo_anterior.month]}/{ultimo_anterior.year}"
+    # "Ano XXXX" → dezembro do ano passado ou mes atual do ano corrente
+    if periodo and periodo.startswith("Ano "):
+        try:
+            ano = int(periodo.replace("Ano ", "").strip())
+            if ano < hoje.year:
+                return ano, 12, f"Dezembro/{ano}"
+            return hoje.year, hoje.month, f"{_MESES_PT[hoje.month]}/{hoje.year}"
+        except ValueError:
+            pass
     return hoje.year, hoje.month, f"{_MESES_PT[hoje.month]}/{hoje.year}"
+
+
+def _is_periodo_ano(periodo: str) -> int | None:
+    """Retorna o ano se o periodo for 'Ano XXXX', None caso contrario."""
+    if periodo and periodo.startswith("Ano "):
+        try:
+            return int(periodo.replace("Ano ", "").strip())
+        except ValueError:
+            pass
+    return None
 
 
 def render():
@@ -87,13 +106,15 @@ def render():
         st.stop()
 
     periodo = st.session_state.get("periodo_global", "Este mes")
+    ano_selecionado = _is_periodo_ano(periodo)
     ano_ref, mes_ref, mes_label = _resolver_mes_do_periodo(periodo)
+    label_periodo_hdr = f"Ano {ano_selecionado}" if ano_selecionado else mes_label
 
     st.markdown(f"""
     <div class="nl-header">
         <div class="badge">Equipe de Locacao</div>
         <h1>Performance <span>Locacao</span></h1>
-        <div class="sub">Dados do kanban Jetimob · Periodo: <strong>{escape(mes_label)}</strong></div>
+        <div class="sub">Dados do kanban Jetimob · Periodo: <strong>{escape(label_periodo_hdr)}</strong></div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -114,9 +135,14 @@ def render():
         if nome_jetimob:
             df_loc = df_loc[df_loc["corretor_nome"].str.strip().str.lower() == nome_jetimob.lower()]
 
-    # Filtro de mes
-    ini = pd.Timestamp(ano_ref, mes_ref, 1, tz="UTC")
-    fim = ini + pd.offsets.MonthBegin(1)
+    # Filtro de periodo (mes ou ano)
+    if ano_selecionado:
+        # MODO ANO: todo o ano selecionado
+        ini = pd.Timestamp(ano_selecionado, 1, 1, tz="UTC")
+        fim = pd.Timestamp(ano_selecionado + 1, 1, 1, tz="UTC")
+    else:
+        ini = pd.Timestamp(ano_ref, mes_ref, 1, tz="UTC")
+        fim = ini + pd.offsets.MonthBegin(1)
 
     if not df_loc.empty:
         if "ganha_em_dt" in df_loc.columns:
@@ -125,6 +151,11 @@ def render():
             df_mes = df_loc[(df_loc["entrou_etapa_em"] >= ini) & (df_loc["entrou_etapa_em"] < fim)]
     else:
         df_mes = pd.DataFrame()
+
+    if ano_selecionado:
+        st.info(f"📅 Exibindo agregado anual do **Ano {ano_selecionado}** — "
+                f"total de {len(df_mes)} locações no periodo. "
+                f"Para ver um mês específico, selecione o mês no filtro.")
 
     qtd = len(df_mes)
     receita = float(df_mes["valor_reais"].sum()) if qtd else 0.0
@@ -139,7 +170,7 @@ def render():
         <div class="kpi-card azul">
             <div class="label">Locacoes Fechadas</div>
             <div class="num">{qtd}</div>
-            <div class="sub">em {escape(mes_label)}</div>
+            <div class="sub">em {escape(label_periodo_hdr)}</div>
         </div>
         <div class="kpi-card green">
             <div class="label">Receita do Periodo</div>
@@ -171,7 +202,7 @@ def render():
     """, unsafe_allow_html=True)
 
     if df_mes.empty:
-        st.info(f"Sem locacoes registradas em {mes_label}.")
+        st.info(f"Sem locacoes registradas em {label_periodo_hdr}.")
     else:
         rk = df_mes.groupby("corretor_nome").agg(
             qtd=("jetimob_id", "count"),
@@ -240,7 +271,7 @@ def render():
     """, unsafe_allow_html=True)
 
     if df_mes.empty:
-        st.caption("Nenhuma locacao no periodo selecionado.")
+        st.caption(f"Nenhuma locacao em {label_periodo_hdr}.")
     else:
         cols_show = ["entrou_etapa_em", "corretor_nome", "nome_cliente",
                      "valor_reais", "telefone_e164", "email"]
