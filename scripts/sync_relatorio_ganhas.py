@@ -26,7 +26,13 @@ from playwright.sync_api import sync_playwright, Page
 
 BASE_URL = "https://app.jetimob.com"
 USER_DATA_DIR = Path.home() / ".jetimob-browser-profile"
-MESES_HISTORICO = 6  # além do mês atual, puxa os 6 anteriores
+MESES_HISTORICO = 15  # além do mês atual, puxa os 15 anteriores (cobre 2025 inteiro)
+
+# Mapeamento contract → tipo no relatorio do Jetimob
+TIPOS_CONTRATO = [
+    (1, "venda"),
+    (2, "locacao"),
+]
 
 
 def load_env() -> tuple[str, str]:
@@ -183,35 +189,72 @@ def main() -> None:
                   wait_until="domcontentloaded", timeout=20_000)
         time.sleep(1)
 
+        from datetime import datetime, timezone
         for ini, fim in meses:
-            # Venda (contract=1)
-            try:
-                dados = fetch_mes(page, ini, fim, contract=1)
-                print(f"[venda]  {ini.strftime('%Y-%m')}: "
-                      f"{dados['qtd']:>3} ganhas · "
-                      f"R$ {dados['valor_cents']/100:>12,.2f}")
-                from datetime import datetime, timezone
-                resultados.append({
-                    "mes_referencia":    ini.isoformat(),
-                    "tipo":              "venda",
-                    "qtd_ganhas":        dados["qtd"],
-                    "valor_total_cents": dados["valor_cents"],
-                    "ranking_json":      dados["ranking"],
-                    "scraped_at":        datetime.now(timezone.utc).isoformat(),
-                })
-            except Exception as e:
-                print(f"[venda]  {ini.strftime('%Y-%m')}: ERRO {e}")
+            for contract_code, tipo in TIPOS_CONTRATO:
+                try:
+                    dados = fetch_mes(page, ini, fim, contract=contract_code)
+                    print(f"[{tipo:<8}] {ini.strftime('%Y-%m')}: "
+                          f"{dados['qtd']:>3} ganhas · "
+                          f"R$ {dados['valor_cents']/100:>12,.2f}")
+                    resultados.append({
+                        "mes_referencia":    ini.isoformat(),
+                        "tipo":              tipo,
+                        "qtd_ganhas":        dados["qtd"],
+                        "valor_total_cents": dados["valor_cents"],
+                        "ranking_json":      dados["ranking"],
+                        "scraped_at":        datetime.now(timezone.utc).isoformat(),
+                    })
+                except Exception as e:
+                    print(f"[{tipo:<8}] {ini.strftime('%Y-%m')}: ERRO {e}")
 
         ctx.close()
 
-    # Upsert
+    # Upsert com retry + proteção: nunca sobrescreve dados positivos com zero
+    # (defesa contra falhas momentâneas no scraping/Jetimob)
     from supabase import create_client
     client = create_client(supa_url, supa_key)
+
+    # Carrega valores existentes para comparar
+    existing = {}
+    try:
+        resp = client.table("resumo_mensal_jetimob").select(
+            "mes_referencia,tipo,qtd_ganhas,valor_total_cents,ranking_json"
+        ).execute()
+        for r in resp.data or []:
+            key = (r["mes_referencia"][:10], r["tipo"])
+            existing[key] = r
+    except Exception as e:
+        print(f"[warn] nao conseguiu carregar existentes: {e}")
+
+    ok = 0
+    skipped = 0
     for row in resultados:
-        resp = (client.table("resumo_mensal_jetimob")
-                      .upsert(row, on_conflict="mes_referencia,tipo")
-                      .execute())
-    print(f"[supabase] upsert de {len(resultados)} linhas concluído")
+        key = (row["mes_referencia"], row["tipo"])
+        prev = existing.get(key)
+        # PROTECAO: se ja tem dados positivos e a coleta atual veio 0,
+        # algo deu errado no scraping — pula o upsert
+        if (prev and (prev.get("qtd_ganhas", 0) or 0) > 0
+                and row["qtd_ganhas"] == 0):
+            print(f"[skip] {row['mes_referencia']} [{row['tipo']}]: "
+                  f"banco tem {prev['qtd_ganhas']} ops mas scraping veio 0 — "
+                  f"NAO sobrescreve (proteção)")
+            skipped += 1
+            continue
+        for tentativa in range(3):
+            try:
+                client.table("resumo_mensal_jetimob") \
+                      .upsert(row, on_conflict="mes_referencia,tipo") \
+                      .execute()
+                ok += 1
+                break
+            except Exception as e:
+                if tentativa < 2:
+                    time.sleep(3)
+                else:
+                    print(f"[ERRO] {row['mes_referencia']} {row['tipo']}: {e}")
+    print(f"[supabase] upsert: {ok}/{len(resultados)} linhas concluído"
+          + (f" (pulou {skipped} por protecao anti-zero)" if skipped else ""))
 
 
 if __name__ == "__main__":

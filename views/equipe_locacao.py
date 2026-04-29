@@ -2,11 +2,10 @@
 Equipe Locacao — pagina unificada (antiga Equipe Locacao + Locacoes do Mes).
 
 Estrutura:
-  1. KPIs (kanban Jetimob — relatorio oficial nao tem locacao)
-  2. Ranking de corretores
+  1. KPIs (resumo_mensal_jetimob OFICIAL — bate 100% com relatorio Jetimob)
+  2. Ranking de corretores (oficial)
   3. Evolucao mensal de receita
-  4. Detalhe das locacoes do periodo
-  5. Charts: por bairro e por origem
+  4. Detalhe das locacoes do periodo (kanban — pode ter diferencas com oficial)
 """
 from datetime import date
 
@@ -51,6 +50,20 @@ def _fetch_ganhas() -> pd.DataFrame:
     df["valor_reais"] = df["valor_cents"] / 100.0
     if "ganha_em" in df.columns:
         df["ganha_em_dt"] = pd.to_datetime(df["ganha_em"], utc=True, errors="coerce")
+    return df
+
+
+@st.cache_data(ttl=300, show_spinner="Carregando resumo oficial...")
+def _fetch_resumo_mensal() -> pd.DataFrame:
+    """Resumo OFICIAL Jetimob (bate 100% com o relatorio)."""
+    client = get_supabase_client()
+    resp = (client.table("resumo_mensal_jetimob").select("*")
+                  .order("mes_referencia", desc=True).execute())
+    if not resp.data:
+        return pd.DataFrame()
+    df = pd.DataFrame(resp.data)
+    df["mes_referencia"] = pd.to_datetime(df["mes_referencia"]).dt.date
+    df["valor_reais"] = df["valor_total_cents"] / 100.0
     return df
 
 
@@ -115,18 +128,19 @@ def render():
     <div class="nl-header">
         <div class="badge">Equipe de Locacao</div>
         <h1>Performance <span>Locacao</span></h1>
-        <div class="sub">Dados do kanban Jetimob · Periodo: <strong>{escape(label_periodo_hdr)}</strong></div>
+        <div class="sub">Dados oficiais Jetimob · Periodo: <strong>{escape(label_periodo_hdr)}</strong></div>
     </div>
     """, unsafe_allow_html=True)
 
     # Carrega dados
+    df_resumo = _fetch_resumo_mensal()
     df_ganhas = _fetch_ganhas()
     df_vendas_unif = filtrar_por_perfil(fetch_vendas(), "corretor")
     df_leads_all = filtrar_por_perfil(fetch_leads_jetimob(), "corretor")
 
     df_leads = aplicar_filtro(df_leads_all, periodo, "created_at")
 
-    # Filtra LOCACOES, etapa Fechamento (kanban)
+    # Filtra LOCACOES, etapa Fechamento (kanban — para detalhe)
     df_loc = df_ganhas[(df_ganhas["contrato"] == "locacao")
                         & (df_ganhas["etapa"] == "Fechamento")].copy() if not df_ganhas.empty else pd.DataFrame()
 
@@ -136,9 +150,8 @@ def render():
         if nome_jetimob:
             df_loc = df_loc[df_loc["corretor_nome"].str.strip().str.lower() == nome_jetimob.lower()]
 
-    # Filtro de periodo (mes ou ano)
+    # Filtro de periodo (mes ou ano) para o KANBAN (detalhe)
     if ano_selecionado:
-        # MODO ANO: todo o ano selecionado
         ini = pd.Timestamp(ano_selecionado, 1, 1, tz="UTC")
         fim = pd.Timestamp(ano_selecionado + 1, 1, 1, tz="UTC")
     else:
@@ -153,15 +166,57 @@ def render():
     else:
         df_mes = pd.DataFrame()
 
-    if ano_selecionado:
-        st.info(f"📅 Exibindo agregado anual do **Ano {ano_selecionado}** — "
-                f"total de {len(df_mes)} locações no periodo. "
-                f"Para ver um mês específico, selecione o mês no filtro.")
+    # =========================================================
+    # KPIs OFICIAIS — vem do resumo_mensal_jetimob (bate 100% com Jetimob)
+    # =========================================================
+    if not df_resumo.empty:
+        df_resumo["_ano"] = df_resumo["mes_referencia"].apply(lambda d: d.year)
 
-    qtd = len(df_mes)
-    receita = float(df_mes["valor_reais"].sum()) if qtd else 0.0
+    if ano_selecionado and not df_resumo.empty:
+        # MODO ANO: agrega todos os meses do ano
+        resumo_ano = df_resumo[(df_resumo["_ano"] == ano_selecionado) & (df_resumo["tipo"] == "locacao")]
+        qtd = int(resumo_ano["qtd_ganhas"].sum())
+        receita = float(resumo_ano["valor_reais"].sum())
+        ranking_anual = {}
+        for _, row in resumo_ano.iterrows():
+            rk = row.get("ranking_json", []) or []
+            if isinstance(rk, list):
+                for r in rk:
+                    nome = r.get("nome", "?")
+                    if nome not in ranking_anual:
+                        ranking_anual[nome] = {"nome": nome, "qtd": 0, "valor_cents": 0}
+                    ranking_anual[nome]["qtd"] += int(r.get("qtd", 0) or 0)
+                    ranking_anual[nome]["valor_cents"] += int(r.get("valor_cents", 0) or 0)
+        ranking_oficial = sorted(ranking_anual.values(), key=lambda r: r["valor_cents"], reverse=True)
+        if not resumo_ano.empty:
+            meses_disp = resumo_ano["mes_referencia"].apply(
+                lambda d: f"{_MESES_PT[d.month][:3]}/{str(d.year)[-2:]}").tolist()
+            st.info(f"📅 Exibindo agregado anual do **Ano {ano_selecionado}** "
+                    f"({len(resumo_ano)} meses oficiais: {', '.join(meses_disp)}).")
+    elif not df_resumo.empty:
+        # MODO MES
+        mes_atual_date = date(ano_ref, mes_ref, 1)
+        resumo_mes = df_resumo[(df_resumo["mes_referencia"] == mes_atual_date)
+                                & (df_resumo["tipo"] == "locacao")]
+        qtd = int(resumo_mes["qtd_ganhas"].iloc[0]) if not resumo_mes.empty else 0
+        receita = float(resumo_mes["valor_reais"].iloc[0]) if not resumo_mes.empty else 0.0
+        ranking_oficial = (resumo_mes["ranking_json"].iloc[0] if not resumo_mes.empty else []) or []
+        if resumo_mes.empty and "/" in periodo:
+            st.warning(f"⚠️ Sem dados oficiais Jetimob para **{label_periodo_hdr}** (locacao). "
+                       f"Sync cobre a partir de Janeiro/2025.")
+    else:
+        qtd = 0
+        receita = 0.0
+        ranking_oficial = []
+
     aluguel_medio = receita / qtd if qtd else 0.0
-    receita_total_historico = float(df_loc["valor_reais"].sum()) if not df_loc.empty else 0.0
+    # Total historico do oficial (todos os meses de locacao)
+    if not df_resumo.empty:
+        receita_total_historico = float(df_resumo[df_resumo["tipo"] == "locacao"]["valor_reais"].sum())
+        qtd_total_historico = int(df_resumo[df_resumo["tipo"] == "locacao"]["qtd_ganhas"].sum())
+    else:
+        receita_total_historico = 0.0
+        qtd_total_historico = 0
 
     # =========================================================
     # KPIs
@@ -186,7 +241,7 @@ def render():
         <div class="kpi-card">
             <div class="label">Total Historico</div>
             <div class="num">{_fmt_brl(receita_total_historico)}</div>
-            <div class="sub">{len(df_loc)} locacoes desde inicio do sync</div>
+            <div class="sub">{qtd_total_historico} locacoes no historico</div>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -202,16 +257,37 @@ def render():
     </div>
     """, unsafe_allow_html=True)
 
-    if df_mes.empty:
-        st.info(f"Sem locacoes registradas em {label_periodo_hdr}.")
-    else:
-        rk = df_mes.groupby("corretor_nome").agg(
+    # Usa ranking_oficial do resumo Jetimob (igual a Equipe Vendas)
+    if ranking_oficial:
+        ranking_ord = sorted(ranking_oficial,
+                             key=lambda r: float(r.get("valor_cents", 0)),
+                             reverse=True)
+        linhas = []
+        for pos, rk in enumerate(ranking_ord, 1):
+            rank_cls = ("rank-1" if pos == 1 else "rank-2" if pos == 2
+                        else "rank-3" if pos == 3 else "rank-other")
+            nome = rk.get("nome", "?")
+            qtd_rk = int(rk.get("qtd", 0))
+            valor_rk = float(rk.get("valor_cents", 0)) / 100.0
+            linhas.append(
+                f'<div class="ranking-item">'
+                f'<div class="rank-num {rank_cls}">{pos}</div>'
+                f'<div style="flex:1">'
+                f'  <div class="rank-name">{escape(nome)}</div>'
+                f'  <div class="rank-sub">{qtd_rk} locacao(es)</div>'
+                f'</div>'
+                f'<div class="rank-value">{_fmt_brl(valor_rk)}</div>'
+                f'</div>'
+            )
+        st.markdown("\n".join(linhas), unsafe_allow_html=True)
+    elif not df_mes.empty:
+        # Fallback: ranking pelo kanban (caso resumo nao tenha rankings)
+        rk_df = df_mes.groupby("corretor_nome").agg(
             qtd=("jetimob_id", "count"),
             valor=("valor_reais", "sum")
         ).reset_index().sort_values("valor", ascending=False)
-
         linhas = []
-        for pos, (_, row) in enumerate(rk.iterrows(), 1):
+        for pos, (_, row) in enumerate(rk_df.iterrows(), 1):
             rank_cls = ("rank-1" if pos == 1 else "rank-2" if pos == 2
                         else "rank-3" if pos == 3 else "rank-other")
             linhas.append(
@@ -219,12 +295,14 @@ def render():
                 f'<div class="rank-num {rank_cls}">{pos}</div>'
                 f'<div style="flex:1">'
                 f'  <div class="rank-name">{escape(row["corretor_nome"])}</div>'
-                f'  <div class="rank-sub">{int(row["qtd"])} locacao(es)</div>'
+                f'  <div class="rank-sub">{int(row["qtd"])} locacao(es) (kanban)</div>'
                 f'</div>'
                 f'<div class="rank-value">{_fmt_brl(float(row["valor"]))}</div>'
                 f'</div>'
             )
         st.markdown("\n".join(linhas), unsafe_allow_html=True)
+    else:
+        st.info(f"Sem locacoes registradas em {label_periodo_hdr}.")
 
     # =========================================================
     # Evolucao mensal de receita
@@ -233,33 +311,28 @@ def render():
     <div class="section-hdr">
         <div class="section-icon">📈</div>
         <div><h2>Evolucao Historica — Locacoes</h2>
-             <p>Receita mensal de locacoes (kanban Jetimob)</p></div>
+             <p>Receita mensal oficial Jetimob</p></div>
     </div>
     """, unsafe_allow_html=True)
 
-    if df_loc.empty:
-        st.caption("Sem locacoes sincronizadas.")
-    else:
-        df_evo = df_loc.copy()
-        if "ganha_em_dt" in df_evo.columns:
-            df_evo["data_ref"] = df_evo["ganha_em_dt"]
-        else:
-            df_evo["data_ref"] = df_evo["entrou_etapa_em"]
-        df_evo["mes"] = df_evo["data_ref"].dt.to_period("M").astype(str)
-        monthly = df_evo.groupby("mes").agg(
-            qtd=("jetimob_id", "count"),
-            receita=("valor_reais", "sum")
-        ).reset_index().sort_values("mes")
+    locacoes_hist = df_resumo[df_resumo["tipo"] == "locacao"].copy() if not df_resumo.empty else pd.DataFrame()
+    # Filtra meses com receita > 0 pra grafico ficar limpo
+    locacoes_hist = locacoes_hist[locacoes_hist["valor_reais"] > 0]
 
-        if not monthly.empty:
-            fig = px.bar(monthly, x="mes", y="receita",
-                         color_discrete_sequence=["#FFB700"],
-                         labels={"mes": "", "receita": "Receita (R$)"},
-                         text=monthly["qtd"].apply(lambda n: f"{n} locacoes"))
-            fig.update_traces(textposition="outside", marker_line_width=0)
-            nl_theme(fig, height=360)
-            fig.update_layout(showlegend=False)
-            st.plotly_chart(fig, use_container_width=True)
+    if locacoes_hist.empty:
+        st.caption("Sem locacoes oficiais sincronizadas.")
+    else:
+        locacoes_hist = locacoes_hist.sort_values("mes_referencia")
+        locacoes_hist["mes"] = locacoes_hist["mes_referencia"].apply(
+            lambda d: f"{_MESES_PT[d.month][:3]}/{str(d.year)[-2:]}")
+        fig = px.bar(locacoes_hist, x="mes", y="valor_reais",
+                     color_discrete_sequence=["#FFB700"],
+                     labels={"mes": "", "valor_reais": "Receita (R$)"},
+                     text=locacoes_hist["qtd_ganhas"].apply(lambda n: f"{n} locacoes"))
+        fig.update_traces(textposition="outside", marker_line_width=0)
+        nl_theme(fig, height=360)
+        fig.update_layout(showlegend=False)
+        st.plotly_chart(fig, use_container_width=True)
 
     # =========================================================
     # Detalhe + busca + export
@@ -267,13 +340,18 @@ def render():
     st.markdown("""
     <div class="section-hdr">
         <div class="section-icon" style="background:#2678BC;">📋</div>
-        <div><h2>Locacoes do Periodo — Detalhe</h2>
-             <p>Lista individual</p></div>
+        <div><h2>Locacoes do Periodo — Detalhe (Kanban)</h2>
+             <p>Lista individual do kanban — pode diferir dos KPIs oficiais</p></div>
     </div>
     """, unsafe_allow_html=True)
 
+    # Nota se houver discrepancia entre kanban e oficial
+    if qtd > 0 and len(df_mes) != qtd:
+        st.caption(f"ℹ️ Oficial Jetimob: **{qtd} locacao(es)** · Kanban: {len(df_mes)}. "
+                   f"Diferenca normal — kanban so mostra registros atuais em Fechamento.")
+
     if df_mes.empty:
-        st.caption(f"Nenhuma locacao em {label_periodo_hdr}.")
+        st.caption(f"Nenhuma locacao em {label_periodo_hdr} no kanban.")
     else:
         cols_show = ["entrou_etapa_em", "corretor_nome", "nome_cliente",
                      "valor_reais", "telefone_e164", "email"]
